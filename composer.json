@@ -2,6 +2,7 @@
     "name": "luca-script/communism",
     "description": "Communism.",
     "type": "project",
+    "version": "0.1.0",
     "license": "0BSD",
     "require": {
         "php": "^8.4",
