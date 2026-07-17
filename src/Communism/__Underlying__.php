@@ -33,6 +33,7 @@ use RuntimeException;
 use function sprintf;
 
 use const PHP_VERSION_ID;
+use const PHP_OS_FAMILY;
 use const ZEND_THREAD_SAFE;
 
 /**
@@ -735,6 +736,10 @@ final class __Underlying__
      */
     private static function init(): FFI
     {
+        $callingConvention = PHP_OS_FAMILY === 'Linux'
+            ? '__attribute__((fastcall))'
+            : '__vectorcall';
+
         self::$def = FFI::cdef(<<<'EOF'
 typedef struct _zval_struct zval;
 typedef uint64_t zend_ulong;
@@ -964,13 +969,19 @@ EOF : '') . <<<'EOF'
     HashTable *zend_constants;
 } zend_executor_globals;
 void *  zend_hash_str_find_ptr_lc(const HashTable *ht, const char *str, size_t len);
-zval * __vectorcall zend_hash_str_find(const HashTable *ht, const char *key, size_t len);
-zval * __vectorcall zend_hash_str_update(HashTable *ht, const char *key, size_t len, zval *pData);
-zval * __vectorcall zend_hash_set_bucket_key(HashTable *ht, Bucket *p, zend_string *key);
+
+EOF
+. "zval * {$callingConvention} zend_hash_str_find(const HashTable *ht, const char *key, size_t len);\n"
+. "zval * {$callingConvention} zend_hash_str_update(HashTable *ht, const char *key, size_t len, zval *pData);\n"
+. "zval * {$callingConvention} zend_hash_set_bucket_key(HashTable *ht, Bucket *p, zend_string *key);\n"
+. <<<'EOF'
 zend_string *zend_strpprintf(size_t max_len, const char *format, ...);
 zend_class_entry *zend_lookup_class(zend_string *name);
 void zend_class_init_statics(zend_class_entry *class_type);
-const char* __vectorcall zend_get_opcode_name(uint8_t opcode);
+
+EOF
+. "const char* {$callingConvention} zend_get_opcode_name(uint8_t opcode);\n"
+. <<<'EOF'
 void free_estring(zend_string **foo);
 
 EOF . (ZEND_THREAD_SAFE
