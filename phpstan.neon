@@ -1,0 +1,21 @@
+includes:
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+
+parameters:
+    level: max
+    paths:
+        - src
+        - ext
+        - tests
+    tmpDir: .phpstan-cache
+    bootstrapFiles:
+        - vendor/autoload.php
+    scanFiles:
+        - phpstan/ffi.stub.php
+    stubFiles:
+        - phpstan/ffi.stub.php
+    treatPhpDocTypesAsCertain: true
+    phpVersion:
+        min: 80400
+        max: 80599
