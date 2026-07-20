@@ -737,7 +737,7 @@ final class __Underlying__
     private static function init(): FFI
     {
         $callingConvention = PHP_OS_FAMILY === 'Linux'
-            ? PHP_INT_SIZE == 4 ? '__attribute__((fastcall))' : 8
+            ? PHP_INT_SIZE == 4 ? '__attribute__((fastcall))' : 0
             : '__vectorcall';
 
         $libraryPrefix = PHP_OS_FAMILY === 'Linux' ? 'lib' : '';
