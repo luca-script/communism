@@ -986,7 +986,7 @@ void free_estring(zend_string **foo);
 
 EOF . (ZEND_THREAD_SAFE
 ? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nvoid *tsrm_get_ls_cache(void);\n"
-: "extern zend_executor_globals executor_globals;\n"), (ZEND_THREAD_SAFE ? 'php8ts' : 'php8'));
+: "extern zend_executor_globals executor_globals;\n"), ((PHP_OS_FAMILY === 'Linux' ? "lib" : "") . (ZEND_THREAD_SAFE ? 'php8ts' : 'php8') . (PHP_OS_FAMILY === 'Linux' ? ".so" : "")));
 
         return self::$def;
     }
