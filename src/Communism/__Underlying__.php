@@ -740,7 +740,17 @@ final class __Underlying__
             ? '__attribute__((fastcall))'
             : '__vectorcall';
 
-        self::$def = FFI::cdef(<<<'EOF'
+        $libraryPrefix = PHP_OS_FAMILY === 'Linux' ? 'lib' : '';
+        $librarySuffix = PHP_OS_FAMILY === 'Linux' ? '.so' : '';
+        $versionMinor = intdiv(PHP_VERSION_ID % 10_000, 100);
+        $libraries = [
+            $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
+            $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
+        ];
+
+        foreach ($libraries as $library) {
+            try {
+                self::$def = FFI::cdef(<<<'EOF'
 typedef struct _zval_struct zval;
 typedef uint64_t zend_ulong;
 typedef union _zend_function zend_function;
@@ -986,7 +996,14 @@ void free_estring(zend_string **foo);
 
 EOF . (ZEND_THREAD_SAFE
 ? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nvoid *tsrm_get_ls_cache(void);\n"
-: "extern zend_executor_globals executor_globals;\n"), ((PHP_OS_FAMILY === 'Linux' ? "lib" : "") . (ZEND_THREAD_SAFE ? 'php8ts' : 'php8') . (PHP_OS_FAMILY === 'Linux' ? ".so" : "")));
+: "extern zend_executor_globals executor_globals;\n"), $library);
+                break;
+            } catch (\FFI\Exception $exception) {
+                if ($library === $libraries[array_key_last($libraries)]) {
+                    throw $exception;
+                }
+            }
+        }
 
         return self::$def;
     }
