@@ -747,6 +747,9 @@ final class __Underlying__
             $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
             $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
         ];
+        if (PHP_OS_FAMILY === 'Linux') {
+            $libraries[] = null; // This doesn't work on Windows, due to Windows not having RTLD_DEFAULT
+        }
 
         foreach ($libraries as $library) {
             try {
