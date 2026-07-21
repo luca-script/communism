@@ -144,6 +144,7 @@ final readonly class ReflectionClass
      * @template TResult
      *
      * @param callable():TResult $callback
+     * @param-immediately-invoked-callable $callback
      *
      * @return TResult
      */
@@ -250,6 +251,7 @@ final readonly class ReflectionClass
     /**
      * @param class-string $cls
      * @param callable(\Communism_FFI\zend_class_entry): void $cb
+     * @param-immediately-invoked-callable $cb
      */
     private function withClassEntry(string $cls, callable $cb): void
     {

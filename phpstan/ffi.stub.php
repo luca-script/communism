@@ -273,13 +273,13 @@ namespace {
      * @property int $executor_globals_offset
      * @property \Communism_FFI\zend_executor_globals $executor_globals
      *
-     * @method static FFI cdef(string $code, string $lib = '')
-     * @method object tsrm_get_ls_cache()
+     * @method static FFI cdef(string $code, string|null $lib = null)
+     * @method \Communism_FFI\ptr<null> tsrm_get_ls_cache()
      * @method \Communism_FFI\zend_string zend_strpprintf(int $max_len, string $format, mixed ...$values)
      * @method \Communism_FFI\zend_class_entry zend_lookup_class(\Communism_FFI\zend_string $name)
      * @method void free_estring(object $foo)
-     * @method \Communism_FFI\zend_function|null zend_hash_str_find_ptr_lc(ptr<\Communism_FFI\HashTable> $ht, string $str, int $len)
-     * @method \Communism_FFI\zval|null zend_hash_str_find(ptr<\Communism_FFI\HashTable> $ht, string $key, int $len)
+     * @method \Communism_FFI\zend_function|null zend_hash_str_find_ptr_lc(\Communism_FFI\ptr<\Communism_FFI\HashTable>|\Communism_FFI\HashTable $ht, string $str, int $len)
+     * @method \Communism_FFI\zval|null zend_hash_str_find(\Communism_FFI\ptr<\Communism_FFI\HashTable>|\Communism_FFI\HashTable $ht, string $key, int $len)
      * @method \Communism_FFI\Bucket|null zend_hash_set_bucket_key(\Communism_FFI\HashTable $ht, \Communism_FFI\Bucket $p, \Communism_FFI\zend_string $key)
      * @method void zend_class_init_statics(\Communism_FFI\zend_class_entry $class_type)
      * @method void zend_jit_blacklist_function(\Communism_FFI\zend_op_array $op_array)
@@ -294,7 +294,7 @@ namespace {
      *     ($type is 'char *' ? \Communism_FFI\ptr<\Communism_FFI\char> :
      *     ($type is 'zend_function *' ? \Communism_FFI\zend_function :
      *     object)))))
-     * ) cast(string $type, object|bool|float|int|null $ptr)
+     * ) cast(string $type, object|bool|float|int|null|\Communism_FFI\ptr<null> $ptr)
      */
     final class FFI
     {
@@ -303,7 +303,7 @@ namespace {
         public \Communism_FFI\zend_executor_globals $executor_globals;
 
         /**
-         * Undocumented function
+         * Get the address of an object
          *
          * @template T of object
          * @param T $val

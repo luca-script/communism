@@ -435,6 +435,7 @@ final class __Underlying__
 
     /**
      * @param class-string $cls
+     * @param non-empty-string $method
      *
      * @return \Communism_FFI\zend_function|null
      */
@@ -538,6 +539,13 @@ final class __Underlying__
         return $clazz->static_members_table__ptr !== null;
     }
 
+    /**
+     * Swaps the two functions in the global function HashTable
+     *
+     * @param callable-string $functionA
+     * @param callable-string $functionB
+     * @return void
+     */
     public static function swapFunctions(string $functionA, string $functionB): void
     {
         if (strcasecmp($functionA, $functionB) === 0) {
@@ -600,6 +608,8 @@ final class __Underlying__
 
     /**
      * Mutation of runtime metadata can leave JIT assumptions stale.
+     * 
+     * @param callable-string $function
      */
     public static function disableJitForFunction(string $function): void
     {
@@ -621,6 +631,12 @@ final class __Underlying__
         self::$blacklistedFunctions[$functionKey] = true;
     }
 
+    /**
+     * Disables JIT for a specific method to stop opcache from breaking things
+     *
+     * @param class-string $className
+     * @param non-empty-string $method
+     */
     public static function disableJitForMethod(string $className, string $method): void
     {
         if (!function_exists('opcache_jit_blacklist')) {
@@ -649,14 +665,15 @@ final class __Underlying__
             $closure = $reflectionMethod->getClosure($declaringClass->newInstanceWithoutConstructor());
         }
 
-        if ($closure === null) {
-            return;
-        }
-
         \opcache_jit_blacklist($closure);
         self::$blacklistedMethods[$methodKey] = true;
     }
 
+    /**
+     * Disable JIT for a specific class to prevent opcache from breaking things
+     *
+     * @param class-string $className
+     */
     public static function disableJitForClass(string $className): void
     {
         if (!function_exists('opcache_jit_blacklist')) {
@@ -712,10 +729,8 @@ final class __Underlying__
                 continue;
             }
 
-            $function = $frame['function'] ?? null;
-            if ($function === null) {
-                continue;
-            }
+            /** @var callable-string $function */
+            $function = $frame['function'];
 
             $class = $frame['class'] ?? null;
             if ($class !== null) {
@@ -737,8 +752,8 @@ final class __Underlying__
     private static function init(): FFI
     {
         $callingConvention = PHP_OS_FAMILY === 'Linux'
-            ? PHP_INT_SIZE == 4 ? '__attribute__((fastcall))' : ''
-            : '__vectorcall';
+            ? (PHP_INT_SIZE === 4 ? '__attribute__((fastcall))' : '')
+            : (PHP_OS_FAMILY === 'Windows' ? '__vectorcall' : '');
 
         $libraryPrefix = PHP_OS_FAMILY === 'Linux' ? 'lib' : '';
         $librarySuffix = PHP_OS_FAMILY === 'Linux' ? '.so' : '';
@@ -747,8 +762,10 @@ final class __Underlying__
             $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
             $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
         ];
-        if (PHP_OS_FAMILY === 'Linux') {
-            $libraries[] = null; // This doesn't work on Windows, due to Windows not having RTLD_DEFAULT
+        // REASON: RTLD_DEFAULT (see v1v) does not work on Windows, don't even try.
+        // 1: https://www.php.net/manual/en/ffi.cdef.php#refsect1-ffi.cdef-parameters
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $libraries[] = null;
         }
 
         foreach ($libraries as $library) {
@@ -1002,11 +1019,16 @@ EOF . (ZEND_THREAD_SAFE
 : "extern zend_executor_globals executor_globals;\n"), $library);
                 break;
             } catch (\FFI\Exception $exception) {
+                // If we are at the last library, re-throw it
+                // TODO: Possibly make this have a clearer exception
                 if ($library === $libraries[array_key_last($libraries)]) {
                     throw $exception;
                 }
             }
         }
+
+        // Required to shut-up PHPStan
+        assert(self::$def !== null);
 
         return self::$def;
     }
@@ -1023,6 +1045,11 @@ EOF . (ZEND_THREAD_SAFE
         return self::init();
     }
 
+    /**
+     * @internal This FFI is unsafe, API consumers should not use this function
+     *
+     * @return FFI
+     */
     public static function ffi(): FFI
     {
         return self::def();
@@ -1058,6 +1085,8 @@ EOF . (ZEND_THREAD_SAFE
             $lsCache = $def->tsrm_get_ls_cache();
             return $def->cast(
                 'zend_executor_globals *',
+                // PHPStan does not understand how native PHP extensions can collapse values to integers, this shuts it up
+                /** @phpstan-ignore binaryOp.invalid, argument.type */
                 $def->cast('char *', $lsCache) + $def->executor_globals_offset,
             );
         } else {

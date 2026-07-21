@@ -42,6 +42,7 @@ final readonly class ReflectionMethod
      * @template T
      *
      * @param callable():T $callback
+     * @param-immediately-invoked-callable $callback
      *
      * @return T
      */
@@ -69,6 +70,7 @@ final readonly class ReflectionMethod
      * @template T
      *
      * @param callable():T $callback
+     * @param-immediately-invoked-callable $callback
      *
      * @return T
      */
@@ -81,6 +83,7 @@ final readonly class ReflectionMethod
      * @template T
      *
      * @param callable():T $callback
+     * @param-immediately-invoked-callable $callback
      *
      * @return T
      */
@@ -93,6 +96,7 @@ final readonly class ReflectionMethod
      * @template T
      *
      * @param callable():T $callback
+     * @param-immediately-invoked-callable $callback
      *
      * @return T
      */
@@ -102,7 +106,7 @@ final readonly class ReflectionMethod
     }
 
     /**
-     * @return string
+     * @return non-empty-string
      */
     public function getName(): string
     {
@@ -157,6 +161,7 @@ final readonly class ReflectionMethod
 
     /**
      * @param class-string $cls
+     * @param non-empty-string $method
      * @param callable(\Communism_FFI\zend_function): void $cb
      */
     private function withMethodEntry(string $cls, string $method, callable $cb): void
