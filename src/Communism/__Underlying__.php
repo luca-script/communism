@@ -608,7 +608,7 @@ final class __Underlying__
 
     /**
      * Mutation of runtime metadata can leave JIT assumptions stale.
-     * 
+     *
      * @param callable-string $function
      */
     public static function disableJitForFunction(string $function): void
