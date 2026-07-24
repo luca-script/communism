@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  linux:
 
     runs-on: ubuntu-26.04
 
@@ -35,7 +35,7 @@ jobs:
     - name: Run test suite
       run: composer run-script test
 
-  build:
+  windows:
 
     runs-on: windows-2025
 
