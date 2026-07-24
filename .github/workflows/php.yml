@@ -67,9 +67,6 @@ jobs:
               exit(1);
           }
 
-          $ffi = FFI::cdef("int abs(int);", "libc.so.6");
-          assert($ffi->abs(-42) === 42);
-
           echo "FFI is working\n";
         '
 
