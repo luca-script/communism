@@ -139,11 +139,12 @@ it('keeps a compliant common header stable', function (): void {
         throw new RuntimeException('Unable to read fixture file.');
     }
     $tokens = Tokens::fromCode($code);
-    $original = $tokens->generateCode();
+    $normalizeLineEndings = static fn(string $value): string => str_replace(["\r\n", "\r"], "\n", $value);
+    $original = $normalizeLineEndings($tokens->generateCode());
 
     $fixer->fix($file, $tokens);
 
-    expect($tokens->generateCode())->toBe($original);
+    expect($normalizeLineEndings($tokens->generateCode()))->toBe($original);
 });
 
 it('extracts header properties into an ordered array', function (): void {

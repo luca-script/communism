@@ -149,8 +149,8 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
 
     protected function applyFix(\SplFileInfo $file, Tokens $tokens): void
     {
-        $eol = $this->whitespacesConfig->getLineEnding();
         $code = $tokens->generateCode();
+        $eol = $this->detectLineEnding($code);
         $purpose = $this->extractPurpose($code);
 
         if (null === $purpose || mb_strlen(trim($purpose)) <= 15) {
@@ -159,6 +159,18 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
 
         $normalized = $this->buildHeader($file->getBasename(), $purpose, $eol) . $this->extractBody($code);
         $tokens->setCode($normalized);
+    }
+
+    private function detectLineEnding(string $code): string
+    {
+        $crlfPosition = strpos($code, "\r\n");
+        $lfPosition = strpos($code, "\n");
+
+        if (false !== $crlfPosition && (false === $lfPosition || $crlfPosition === $lfPosition - 1)) {
+            return "\r\n";
+        }
+
+        return "\n";
     }
 
     private function buildHeader(string $fileName, string $purpose, string $eol): string
@@ -385,9 +397,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
 
         $body = substr($code, $position + strlen($declare));
 
-        $body = str_replace(["\r\n", "\r"], "\n", $body);
-
-        return ltrim(str_replace("\n", $this->whitespacesConfig->getLineEnding(), $body), "\r\n");
+        return ltrim($body, "\r\n");
     }
 
     /**
