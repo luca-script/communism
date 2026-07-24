@@ -385,7 +385,9 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
 
         $body = substr($code, $position + strlen($declare));
 
-        return ltrim($body, "\r\n");
+        $body = str_replace(["\r\n", "\r"], "\n", $body);
+
+        return ltrim(str_replace("\n", $this->whitespacesConfig->getLineEnding(), $body), "\r\n");
     }
 
     /**
