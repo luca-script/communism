@@ -10,49 +10,42 @@ permissions:
   contents: read
 
 jobs:
-  linux:
+  test:
+    name: "${{ matrix.os_name }} (PHP ${{ matrix.php_version }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            os_name: Linux
+            php_version: '8.4'
+          - os: ubuntu-26.04
+            os_name: Linux
+            php_version: '8.5'
+          - os: windows-2025
+            os_name: Windows
+            php_version: '8.4'
+          - os: windows-2025
+            os_name: Windows
+            php_version: '8.5'
 
-    runs-on: ubuntu-26.04
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Validate composer.json and composer.lock
-      run: composer validate --strict
-
-    - name: Cache Composer packages
-      id: composer-cache
-      uses: actions/cache@v3
-      with:
-        path: vendor
-        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-php-
-
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress
-
-    - name: Run test suite
-      run: composer run-script test
-
-  windows:
-
-    runs-on: windows-2025
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up PHP 8.5 with FFI
+    - name: Set up PHP with FFI
       uses: shivammathur/setup-php@v2
       with:
-        php-version: '8.5'
-        extensions: ffi
+        php-version: ${{ matrix.php_version }}
+        extensions: ffi, mbstring
         ini-values: ffi.enable=true
         coverage: none
       env:
         fail-fast: true
 
     - name: Verify PHP and FFI
+      shell: bash
       run: |
         php --version
         php --ri ffi
@@ -74,13 +67,12 @@ jobs:
       run: composer validate --strict
 
     - name: Cache Composer packages
-      id: composer-cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: vendor
-        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+        key: ${{ runner.os }}-php-${{ matrix.php_version }}-${{ hashFiles('**/composer.lock') }}
         restore-keys: |
-          ${{ runner.os }}-php-
+          ${{ runner.os }}-php-${{ matrix.php_version }}-
 
     - name: Install dependencies
       run: composer install --prefer-dist --no-progress
