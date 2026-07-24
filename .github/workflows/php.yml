@@ -1,0 +1,89 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+
+    runs-on: ubuntu-26.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Validate composer.json and composer.lock
+      run: composer validate --strict
+
+    - name: Cache Composer packages
+      id: composer-cache
+      uses: actions/cache@v3
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress
+
+    - name: Run test suite
+      run: composer run-script test
+
+  windows:
+
+    runs-on: windows-2025
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up PHP 8.5 with FFI
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.5'
+        extensions: ffi
+        ini-values: ffi.enable=true
+        coverage: none
+      env:
+        fail-fast: true
+
+    - name: Verify PHP and FFI
+      run: |
+        php --version
+        php --ri ffi
+        php -r '
+          if (!extension_loaded("ffi")) {
+              fwrite(STDERR, "FFI extension is not loaded\n");
+              exit(1);
+          }
+
+          if (ini_get("ffi.enable") !== "1") {
+              fwrite(STDERR, "FFI is not fully enabled\n");
+              exit(1);
+          }
+
+          echo "FFI is working\n";
+        '
+
+    - name: Validate composer.json and composer.lock
+      run: composer validate --strict
+
+    - name: Cache Composer packages
+      id: composer-cache
+      uses: actions/cache@v3
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress
+
+    - name: Run test suite
+      run: composer run-script test
