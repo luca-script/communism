@@ -42,6 +42,37 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up PHP 8.5 with FFI
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.5'
+        extensions: ffi
+        ini-values: ffi.enable=true
+        coverage: none
+      env:
+        fail-fast: true
+
+    - name: Verify PHP and FFI
+      run: |
+        php --version
+        php --ri ffi
+        php -r '
+          if (!extension_loaded("ffi")) {
+              fwrite(STDERR, "FFI extension is not loaded\n");
+              exit(1);
+          }
+
+          if (ini_get("ffi.enable") !== "1") {
+              fwrite(STDERR, "FFI is not fully enabled\n");
+              exit(1);
+          }
+
+          $ffi = FFI::cdef("int abs(int);", "libc.so.6");
+          assert($ffi->abs(-42) === 42);
+
+          echo "FFI is working\n";
+        '
+
     - name: Validate composer.json and composer.lock
       run: composer validate --strict
 
