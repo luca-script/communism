@@ -758,15 +758,19 @@ final class __Underlying__
         $libraryPrefix = PHP_OS_FAMILY === 'Linux' ? 'lib' : '';
         $librarySuffix = PHP_OS_FAMILY === 'Linux' ? '.so' : '';
         $versionMinor = intdiv(PHP_VERSION_ID % 10_000, 100);
-        $libraries = [
-            $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
-            $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
-        ];
         // REASON: RTLD_DEFAULT (see v1v) does not work on Windows, don't even try.
         // 1: https://www.php.net/manual/en/ffi.cdef.php#refsect1-ffi.cdef-parameters
-        if (PHP_OS_FAMILY !== 'Windows') {
-            $libraries[] = null;
-        }
+        $libraries = PHP_OS_FAMILY === 'Windows'
+            ? [
+                $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
+                $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
+            ]
+            : [
+                // Bind to the active CLI process before trying a separate libphp instance.
+                null,
+                $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
+                $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
+            ];
 
         foreach ($libraries as $library) {
             try {
