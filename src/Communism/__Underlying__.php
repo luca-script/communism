@@ -654,15 +654,16 @@ final class __Underlying__
         }
 
         $reflectionMethod = new \ReflectionMethod($className, $method);
-        if ($reflectionMethod->isStatic()) {
-            $closure = $reflectionMethod->getClosure();
-        } else {
-            $declaringClass = $reflectionMethod->getDeclaringClass();
-            if (!$declaringClass->isInstantiable()) {
-                return;
-            }
+        $originalFlags = $func->fn_flags;
 
-            $closure = $reflectionMethod->getClosure($declaringClass->newInstanceWithoutConstructor());
+        // ReflectionMethod requires an object for non-static methods. Temporarily
+        // presenting the function as static gives us a closure without creating
+        // an object whose destructor could run during cleanup.
+        $func->fn_flags |= self::ZEND_ACC_STATIC;
+        try {
+            $closure = $reflectionMethod->getClosure();
+        } finally {
+            $func->fn_flags = $originalFlags;
         }
 
         \opcache_jit_blacklist($closure);
