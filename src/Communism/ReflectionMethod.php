@@ -126,6 +126,20 @@ final readonly class ReflectionMethod
         return $this->reflection->isStatic();
     }
 
+    /**
+     * Replace this method with the implementation of a method declared by a
+     * derived class.
+     */
+    public function swap(ReflectionMethod $replacement): void
+    {
+        __Underlying__::swapMethods(
+            $this->reflection->getDeclaringClass()->getName(),
+            $this->getName(),
+            $replacement->reflection->getDeclaringClass()->getName(),
+            $replacement->getName(),
+        );
+    }
+
     public function setFlag(int $flag, bool $do = true): void
     {
         $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function ($func) use ($flag, $do): void {

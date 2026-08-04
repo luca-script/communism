@@ -453,6 +453,26 @@ final class __Underlying__
         return $def->cast('zend_function *', $funcPtr);
     }
 
+    /**
+     * @param class-string $cls
+     * @param non-empty-string $method
+     *
+     * @return \Communism_FFI\zval|null
+     */
+    private static function lookupMethodEntry(string $cls, string $method): ?object
+    {
+        $def = self::def();
+        $clazz = self::lookupClass($cls);
+        $functionTable = $clazz->function_table;
+        $methodLower = mb_strtolower($method);
+
+        return $def->zend_hash_str_find(
+            FFI::addr($functionTable),
+            $methodLower,
+            mb_strlen($methodLower),
+        );
+    }
+
     public static function opcodeName(int $opcode): string
     {
         $name = self::def()->zend_get_opcode_name($opcode);
@@ -604,6 +624,45 @@ final class __Underlying__
             self::disableJitForFunction($functionB);
             self::blacklistCurrentCallers();
         }
+    }
+
+    /**
+     * Swaps two method implementations, where the second class derives from
+     * the first one.
+     *
+     * @param class-string $classA
+     * @param non-empty-string $methodA
+     * @param class-string $classB
+     * @param non-empty-string $methodB
+     */
+    public static function swapMethods(string $classA, string $methodA, string $classB, string $methodB): void
+    {
+        if (strcasecmp($classA, $classB) === 0 && strcasecmp($methodA, $methodB) === 0) {
+            return;
+        }
+
+        if (!is_a($classB, $classA, true)) {
+            throw new InvalidArgumentException(sprintf('%s must derive from %s before their methods can be swapped', $classB, $classA));
+        }
+
+        $entryA = self::lookupMethodEntry($classA, $methodA);
+        $entryB = self::lookupMethodEntry($classB, $methodB);
+
+        if ($entryA === null || $entryB === null) {
+            throw new InvalidArgumentException(sprintf('Both methods must exist before they can be swapped: %s::%s, %s::%s', $classA, $methodA, $classB, $methodB));
+        }
+
+        // Invalidate JIT assumptions while the original implementations are
+        // still installed. This also matters when one of the methods being
+        // swapped is disableJitForMethod itself.
+        self::disableJitForMethod($classA, $methodA);
+        self::disableJitForMethod($classB, $methodB);
+
+        $functionA = $entryA->value->ptr;
+        $entryA->value->ptr = $entryB->value->ptr;
+        $entryB->value->ptr = $functionA;
+
+        self::blacklistCurrentCallers();
     }
 
     /**

@@ -2,25 +2,15 @@
 
 declare(strict_types=1);
 
+use Communism\ReflectionMethod;
 use Communism\__Underlying__;
-use Communism\Executor;
-
-function test_blacklist_jit(Closure $closure): void
-{
-    JitBlacklistDestructorProbe::$blacklistCalls++;
-    call_user_func(JitBlacklistDestructorProbe::$originalBlacklist, $closure);
-}
 
 final class JitBlacklistDestructorProbe
 {
     public static int $destructorCalls = 0;
     public static int $blacklistCalls = 0;
-    /** @var Closure(Closure): void */
-    public static Closure $originalBlacklist;
 
-    public function target(): void
-    {
-    }
+    public function target(): void {}
 
     public function __destruct()
     {
@@ -34,11 +24,11 @@ it('does not instantiate classes while blacklisting instance methods', function 
     JitBlacklistDestructorProbe::$destructorCalls = 0;
     JitBlacklistDestructorProbe::$blacklistCalls = 0;
 
-    class_exists(__Underlying__::class);
-    JitBlacklistDestructorProbe::$originalBlacklist = Closure::fromCallable('Communism\\blacklistJit');
+    $method = new ReflectionMethod(__Underlying__::class, 'disableJitForMethod');
+    $replacement = new ReflectionMethod('JitBlacklistTestUnderlying', 'disableJitForMethod');
     $swapped = false;
     try {
-        Executor::swapFunctions('Communism\\blacklistJit', 'test_blacklist_jit');
+        $method->swap($replacement);
         $swapped = true;
         JitBlacklistDestructorProbe::$blacklistCalls = 0;
 
@@ -49,7 +39,7 @@ it('does not instantiate classes while blacklisting instance methods', function 
         expect(JitBlacklistDestructorProbe::$destructorCalls)->toBe(0);
     } finally {
         if ($swapped) {
-            Executor::swapFunctions('Communism\\blacklistJit', 'test_blacklist_jit');
+            $method->swap($replacement);
         }
     }
 });

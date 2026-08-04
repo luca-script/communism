@@ -1,4 +1,6 @@
 {
+    "$schema": "meta/phpactor.schema.json",
     "language_server_php_cs_fixer.enabled": true,
-    "language_server_phpstan.enabled": true
+    "language_server_phpstan.enabled": true,
+    "language_server_highlight.enabled": true
 }
