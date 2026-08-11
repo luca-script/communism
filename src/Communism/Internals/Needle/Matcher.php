@@ -401,8 +401,8 @@ final class Matcher
     private static function matchesInvocationAssignment(Instruction $assignment, Instruction $call): bool
     {
         return $assignment->name === 'ASSIGN'
-            && $call->result->kind === Operand::VARIABLE
-            && $assignment->operand2->kind === Operand::VARIABLE
+            && in_array($call->result->kind, [Operand::VARIABLE, Operand::TEMPORARY], true)
+            && $assignment->operand2->kind === $call->result->kind
             && $assignment->operand2->value === $call->result->value;
     }
 

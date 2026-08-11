@@ -680,10 +680,12 @@ final class Injector
         };
 
         $operand1 = $replace($instruction->operand1);
-        if (str_starts_with($instruction->name, 'SEND') && $operand1->kind === Operand::CONSTANT && $instruction->name !== 'SEND_VAL') {
+        if (str_starts_with($instruction->name, 'SEND')) {
+            [$opcode, $name] = self::sendOpcode($instruction, $operand1);
+
             return new Instruction(
-                Zend::opcodeId('SEND_VAL'),
-                'SEND_VAL',
+                $opcode,
+                $name,
                 $instruction->result,
                 $operand1,
                 $instruction->operand2,
@@ -695,6 +697,23 @@ final class Injector
         }
 
         return $instruction->withOperands($operand1, $replace($instruction->operand2), $replace($instruction->result));
+    }
+
+    /** @return array{0: int, 1: string} */
+    private static function sendOpcode(Instruction $original, Operand $operand): array
+    {
+        if ($operand->kind === Operand::CONSTANT) {
+            return [Zend::opcodeId('SEND_VAL'), 'SEND_VAL'];
+        }
+
+        if ($operand->kind === Operand::TEMPORARY) {
+            return [Zend::opcodeId('SEND_VAL_EX'), 'SEND_VAL_EX'];
+        }
+
+        // SEND_VAR_EX accepts both CV and VAR operands. SEND_VAR is still
+        // emitted by some compilers, but it is not a stable lookup name for
+        // zend_get_opcode_id() on every supported PHP development build.
+        return [Zend::opcodeId('SEND_VAR_EX'), 'SEND_VAR_EX'];
     }
 
     /**
@@ -1372,9 +1391,10 @@ final class Injector
                         continue;
                     }
                     if (isset($argumentReplacements[$argument])) {
+                        [$opcode, $name] = self::sendOpcode($instruction, $argumentReplacements[$argument]);
                         $rewritten[$index] = new Instruction(
-                            Zend::opcodeId('SEND_VAL'),
-                            'SEND_VAL',
+                            $opcode,
+                            $name,
                             Operand::unused($instruction->result->rawValue ?? (is_int($instruction->result->value) ? $instruction->result->value : 0)),
                             $argumentReplacements[$argument],
                             $instruction->operand2,
@@ -1399,9 +1419,10 @@ final class Injector
                         continue;
                     }
                     if ($argument === $match->argumentIndex) {
+                        [$opcode, $name] = self::sendOpcode($instruction, $handlerReturn->operand1);
                         $rewritten[$index] = new Instruction(
-                            Zend::opcodeId('SEND_VAL'),
-                            'SEND_VAL',
+                            $opcode,
+                            $name,
                             Operand::unused($instruction->result->rawValue ?? (is_int($instruction->result->value) ? $instruction->result->value : 0)),
                             $handlerReturn->operand1,
                             $instruction->operand2,
