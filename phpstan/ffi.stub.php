@@ -442,8 +442,8 @@ namespace {
      * @method int zend_get_opcode_id(string $name, int $length)
      * @method void zend_vm_set_opcode_handler(object $opcode)
      * @method object CreateToolhelp32Snapshot(int $flags, int $processId)
-     * @method bool Module32FirstA(object $snapshot, object $module)
-     * @method bool Module32NextA(object $snapshot, object $module)
+     * @method bool Module32First(object $snapshot, object $module)
+     * @method bool Module32Next(object $snapshot, object $module)
      * @method bool CloseHandle(object $handle)
      *
      * @phpstan-method (

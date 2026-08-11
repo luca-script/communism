@@ -58,14 +58,27 @@ final class FindLoadedLibrary
             return [];
         }
 
+        return self::phpFromLinuxMaps($maps);
+    }
+
+    /**
+     * @param list<string> $maps
+     *
+     * @return list<string>
+     */
+    private static function phpFromLinuxMaps(array $maps): array
+    {
         $libraries = [];
         foreach ($maps as $line) {
             $match = [];
-            if (1 !== preg_match('/\s(\/\S+\.so(?:\.\S+)?)$/', $line, $match)) {
+            // A mapped library can have a " (deleted)" marker when the file
+            // was replaced after PHP loaded it. The mapped path is still the
+            // handle that FFI can use, so remove the marker after matching it.
+            if (1 !== preg_match('~\s(?<path>/.*?\.so(?:\.[^\s]*)?)(?:\s+\(deleted\))?$~', $line, $match)) {
                 continue;
             }
 
-            $path = preg_replace('/ \(deleted\)$/', '', $match[1]) ?? $match[1];
+            $path = $match['path'];
             if (1 !== preg_match('~(?:^|/)(?:lib)?php[^/]*\.so(?:\.[^/]*)?$~i', $path)) {
                 continue;
             }
@@ -99,8 +112,8 @@ typedef struct {
     char szExePath[260];
 } MODULEENTRY32A;
 HANDLE CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID);
-BOOL Module32FirstA(HANDLE hSnapshot, MODULEENTRY32A *lpme);
-BOOL Module32NextA(HANDLE hSnapshot, MODULEENTRY32A *lpme);
+BOOL Module32First(HANDLE hSnapshot, MODULEENTRY32A *lpme);
+BOOL Module32Next(HANDLE hSnapshot, MODULEENTRY32A *lpme);
 BOOL CloseHandle(HANDLE hObject);
 CDEF, 'kernel32.dll');
 
@@ -118,7 +131,7 @@ CDEF, 'kernel32.dll');
                 $module = $ffi->new('MODULEENTRY32A');
                 $module->dwSize = FFI::sizeof($module);
                 $libraries = [];
-                $hasModule = $ffi->Module32FirstA($snapshot, FFI::addr($module));
+                $hasModule = $ffi->Module32First($snapshot, FFI::addr($module));
 
                 while ($hasModule) {
                     $name = FFI::string($module->szModule);
@@ -127,7 +140,7 @@ CDEF, 'kernel32.dll');
                         $libraries[] = '' === $path ? $name : $path;
                     }
 
-                    $hasModule = $ffi->Module32NextA($snapshot, FFI::addr($module));
+                    $hasModule = $ffi->Module32Next($snapshot, FFI::addr($module));
                 }
 
                 return array_values(array_unique($libraries));
