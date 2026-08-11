@@ -210,6 +210,7 @@ namespace Communism_FFI {
      * @property zend_function|null $prototype
      * @property zend_string|null $doc_comment
      * @property zend_property_info|null $prop_info
+     * @property int $fn_flags2
      * @property zend_op_array $op_array
      * @property int $type
      */
@@ -224,6 +225,7 @@ namespace Communism_FFI {
         public ?zend_function $prototype;
         public ?zend_string $doc_comment;
         public ?zend_property_info $prop_info;
+        public int $fn_flags2;
         public int $num_args;
         public int $required_num_args;
         public mixed $arg_info;
@@ -234,6 +236,7 @@ namespace Communism_FFI {
     /**
      * @property int $last
      * @property int $fn_flags
+     * @property int $fn_flags2
      * @property int $num_args
      * @property int $last_var
      * @property int $T
@@ -248,6 +251,7 @@ namespace Communism_FFI {
     {
         public int $last;
         public int $fn_flags;
+        public int $fn_flags2;
         public int $last_literal;
         public int $num_args;
         public int $last_var;
