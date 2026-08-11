@@ -2,5 +2,7 @@
     "$schema": "meta/phpactor.schema.json",
     "language_server_php_cs_fixer.enabled": true,
     "language_server_phpstan.enabled": true,
-    "language_server_highlight.enabled": true
+    "language_server_highlight.enabled": true,
+    "composer.autoloader_path": "%project_root%/vendor/autoload.php",
+    "composer.enable": true
 }

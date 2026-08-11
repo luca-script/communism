@@ -5,8 +5,81 @@ declare(strict_types=1);
 namespace Communism_FFI {
     /**
      * @template T
+     * @mixin T
+     * @implements \ArrayAccess<int, T>
      */
-    final class ptr {}
+    final class ptr implements \ArrayAccess
+    {
+        public function offsetExists(mixed $offset): bool {}
+
+        /** @return T */
+        public function offsetGet(mixed $offset): mixed {}
+
+        /** @param T $value */
+        public function offsetSet(mixed $offset, mixed $value): void {}
+
+        public function offsetUnset(mixed $offset): void {}
+    }
+
+    /** @implements \ArrayAccess<int, zend_op> */
+    final class zend_op_pointer implements \ArrayAccess
+    {
+        public function offsetExists(mixed $offset): bool {}
+        public function offsetGet(mixed $offset): zend_op {}
+        public function offsetSet(mixed $offset, mixed $value): void {}
+        public function offsetUnset(mixed $offset): void {}
+    }
+
+    /** @implements \ArrayAccess<int, zval> */
+    final class zval_pointer implements \ArrayAccess
+    {
+        public function offsetExists(mixed $offset): bool {}
+        public function offsetGet(mixed $offset): zval {}
+        public function offsetSet(mixed $offset, mixed $value): void {}
+        public function offsetUnset(mixed $offset): void {}
+    }
+
+    /** @implements \ArrayAccess<int, zend_string> */
+    final class zend_string_pointer implements \ArrayAccess
+    {
+        public function offsetExists(mixed $offset): bool {}
+        public function offsetGet(mixed $offset): zend_string {}
+        public function offsetSet(mixed $offset, mixed $value): void {}
+        public function offsetUnset(mixed $offset): void {}
+    }
+
+    /** @implements \ArrayAccess<int, zend_live_range> */
+    final class zend_live_range_pointer implements \ArrayAccess
+    {
+        public function offsetExists(mixed $offset): bool {}
+        public function offsetGet(mixed $offset): zend_live_range {}
+        public function offsetSet(mixed $offset, mixed $value): void {}
+        public function offsetUnset(mixed $offset): void {}
+    }
+
+    final class zend_live_range
+    {
+        public int $var;
+        public int $start;
+        public int $end;
+    }
+
+    /** @implements \ArrayAccess<int, zend_try_catch_element> */
+    final class zend_try_catch_pointer implements \ArrayAccess
+    {
+        public function offsetExists(mixed $offset): bool {}
+        public function offsetGet(mixed $offset): zend_try_catch_element {}
+        public function offsetSet(mixed $offset, mixed $value): void {}
+        public function offsetUnset(mixed $offset): void {}
+    }
+
+    final class zend_try_catch_element
+    {
+        public int $try_op;
+        public int $catch_op;
+        public int $finally_op;
+        public int $finally_end;
+    }
 
     /**
      * @property int $refcount
@@ -43,6 +116,8 @@ namespace Communism_FFI {
     {
         public ?object $ptr;
         public ?zend_function $func;
+        public int $lval;
+        public float $dval;
     }
 
     /**
@@ -53,8 +128,24 @@ namespace Communism_FFI {
     final class zval
     {
         public zend_value $value;
-        public object $u1;
-        public object $u2;
+        public zval_u1 $u1;
+        public zval_u2 $u2;
+    }
+
+    final class zval_u1
+    {
+        public int $type_info;
+        public zval_u1_v $v;
+    }
+
+    final class zval_u1_v
+    {
+        public int $type;
+    }
+
+    final class zval_u2
+    {
+        public int $extra;
     }
 
     /**
@@ -69,7 +160,31 @@ namespace Communism_FFI {
         public zend_string $key;
     }
 
-    final class HashTable {}
+    final class HashTable
+    {
+        public int $nNumUsed;
+        public int $nNumOfElements;
+        /** @var ptr<Bucket> */
+        public ?object $arData;
+        public zval_pointer $arPacked;
+    }
+
+    final class zend_file_handle {}
+
+    final class zend_compiler_globals
+    {
+        public ?HashTable $function_table;
+        public ?HashTable $class_table;
+        public int $compiler_options;
+        public ?zend_arena $arena;
+    }
+
+    final class zend_arena
+    {
+        public object $ptr;
+        public object $end;
+        public ?zend_arena $prev;
+    }
 
     /**
      * @property mixed $ptr
@@ -94,36 +209,54 @@ namespace Communism_FFI {
     final class zend_function
     {
         public int $type;
+        /** @var array<int, int> */
+        public array $arg_flags;
         public int $fn_flags;
         public ?zend_string $function_name;
         public ?zend_class_entry $scope;
         public ?zend_function $prototype;
         public ?zend_string $doc_comment;
         public ?zend_property_info $prop_info;
+        public int $num_args;
+        public int $required_num_args;
+        public mixed $arg_info;
+        public ?HashTable $attributes;
         public zend_op_array $op_array;
     }
 
     /**
      * @property int $last
+     * @property int $fn_flags
      * @property int $num_args
      * @property int $last_var
      * @property int $T
+     * @property int $cache_size
+     * @property object|null $run_time_cache__ptr
      * @property zend_string|null $filename
      * @property int $line_start
      * @property int $line_end
-     * @property array<int, \Communism_FFI\zend_op>|null $opcodes
+     * @property \Communism_FFI\zend_op_pointer|null $opcodes
      */
     final class zend_op_array
     {
         public int $last;
+        public int $fn_flags;
+        public int $last_literal;
         public int $num_args;
         public int $last_var;
         public int $T;
+        public int $cache_size;
+        public ?object $run_time_cache__ptr;
         public ?zend_string $filename;
         public int $line_start;
         public int $line_end;
-        /** @var array<int, zend_op>|null */
-        public ?array $opcodes;
+        public int $last_live_range;
+        public int $last_try_catch;
+        public ?zend_live_range_pointer $live_range;
+        public ?zend_try_catch_pointer $try_catch_array;
+        public ?zend_op_pointer $opcodes;
+        public ?zval_pointer $literals;
+        public ?zend_string_pointer $vars;
     }
 
     /**
@@ -139,15 +272,16 @@ namespace Communism_FFI {
      */
     final class zend_op
     {
+        public object $handler;
         public int $opcode;
         public int $op1_type;
         public int $op2_type;
         public int $result_type;
         public int $extended_value;
         public int $lineno;
-        public object $op1;
-        public object $op2;
-        public object $result;
+        public znode_op $op1;
+        public znode_op $op2;
+        public znode_op $result;
     }
 
     /**
@@ -162,6 +296,7 @@ namespace Communism_FFI {
         public int $var;
         public int $num;
         public int $opline_num;
+        public ?zval_pointer $zv;
     }
 
     /**
@@ -264,7 +399,10 @@ namespace Communism_FFI {
 }
 
 namespace FFI {
-    abstract class CData {}
+    abstract class CData
+    {
+        public int $cdata;
+    }
 }
 
 namespace {
@@ -279,28 +417,61 @@ namespace {
      * @method \Communism_FFI\zend_class_entry zend_lookup_class(\Communism_FFI\zend_string $name)
      * @method void free_estring(object $foo)
      * @method \Communism_FFI\zend_function|null zend_hash_str_find_ptr_lc(\Communism_FFI\ptr<\Communism_FFI\HashTable>|\Communism_FFI\HashTable $ht, string $str, int $len)
-     * @method \Communism_FFI\zval|null zend_hash_str_find(\Communism_FFI\ptr<\Communism_FFI\HashTable>|\Communism_FFI\HashTable $ht, string $key, int $len)
+    * @method \Communism_FFI\zval|null zend_hash_str_find(\Communism_FFI\ptr<\Communism_FFI\HashTable>|\Communism_FFI\HashTable $ht, string $key, int $len)
+     * @method \Communism_FFI\zval|null zend_hash_str_update(\Communism_FFI\ptr<\Communism_FFI\HashTable>|\Communism_FFI\HashTable $ht, string $key, int $len, object $value)
      * @method \Communism_FFI\Bucket|null zend_hash_set_bucket_key(\Communism_FFI\HashTable $ht, \Communism_FFI\Bucket $p, \Communism_FFI\zend_string $key)
      * @method void zend_class_init_statics(\Communism_FFI\zend_class_entry $class_type)
+     * @method void zend_hash_del_bucket(\Communism_FFI\HashTable $ht, object $bucket)
+     * @method void zend_stream_init_filename(object $handle, string $filename)
+     * @method void zend_destroy_file_handle(object $handle)
+     * @method \Communism_FFI\zend_op_array|null compile_file(object $handle, int $type)
+     * @method void destroy_op_array(\Communism_FFI\zend_op_array $op_array)
      * @method void zend_jit_blacklist_function(\Communism_FFI\zend_op_array $op_array)
+     * @method int zend_hash_func(string $str, int $len)
+     * @method \Communism_FFI\ptr<object> _emalloc(int $size)
+     * @method void _efree(object $ptr)
      * @method static string string(\Communism_FFI\ptr<\Communism_FFI\char> $ptr, int $len)
      * @method string|null zend_get_opcode_name(int $opcode)
+     * @method int zend_get_opcode_id(string $name, int $length)
+     * @method void zend_vm_set_opcode_handler(object $opcode)
      *
      * @phpstan-method (
      *     $type is 'Bucket *' ? \Communism_FFI\Bucket :
+     *     ($type is 'HashTable *' ? \Communism_FFI\HashTable :
      *     ($type is 'zend_executor_globals *' ? \Communism_FFI\zend_executor_globals :
+     *     ($type is 'zend_compiler_globals *' ? \Communism_FFI\zend_compiler_globals :
+     *     ($type is 'zend_class_entry *' ? \Communism_FFI\zend_class_entry :
+     *     ($type is 'zend_file_handle *' ? \Communism_FFI\zend_file_handle :
      *     ($type is 'zend_property_info *' ? \Communism_FFI\zend_property_info :
      *     ($type is 'void ***' ? array<int, object> :
      *     ($type is 'char *' ? \Communism_FFI\ptr<\Communism_FFI\char> :
+     *     ($type is 'zend_op *' ? \Communism_FFI\zend_op_pointer :
      *     ($type is 'zend_function *' ? \Communism_FFI\zend_function :
-     *     object)))))
-     * ) cast(string $type, object|bool|float|int|null|\Communism_FFI\ptr<null> $ptr)
+     *     ($type is 'zend_string *' ? \Communism_FFI\zend_string :
+     *     ($type is 'zval *' ? \Communism_FFI\zval_pointer :
+     *     ($type is 'uintptr_t' ? \FFI\CData :
+     *     object))))))))))))
+     * )) cast(string $type, object|bool|float|int|null|\Communism_FFI\ptr<null> $ptr)
      */
     final class FFI
     {
         public int $executor_globals_id;
         public int $executor_globals_offset;
         public \Communism_FFI\zend_executor_globals $executor_globals;
+        public int $compiler_globals_offset;
+        public \Communism_FFI\zend_compiler_globals $compiler_globals;
+
+        /**
+         * @phpstan-return (
+         *     $type is 'zval' ? \Communism_FFI\zval :
+         *     ($type is 'zend_function' ? \Communism_FFI\zend_function : object)
+         * )
+         */
+        public function new(string $type): object {}
+
+        public static function sizeof(object $value): int {}
+
+        public static function memcpy(object $to, object $from, int $size): void {}
 
         /**
          * Get the address of an object

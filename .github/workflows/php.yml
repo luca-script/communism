@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: "${{ matrix.os_name }} (PHP ${{ matrix.php_version }})"
+    name: "${{ matrix.os_name }} (PHP ${{ matrix.php_version }}) - ${{ matrix.suite }}"
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +28,7 @@ jobs:
           - os: windows-2025
             os_name: Windows
             php_version: '8.5'
+        suite: [mixin, reflect, bytecode, internals]
 
     runs-on: ${{ matrix.os }}
 
@@ -77,5 +78,5 @@ jobs:
     - name: Install dependencies
       run: composer install --prefer-dist --no-progress
 
-    - name: Run test suite
-      run: composer run-script test
+    - name: Run ${{ matrix.suite }} test suite
+      run: composer run-script test:${{ matrix.suite }}

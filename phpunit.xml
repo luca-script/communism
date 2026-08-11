@@ -8,8 +8,17 @@
     executionOrder="random"
 >
     <testsuites>
-        <testsuite name="Unit">
-            <directory suffix="Test.php">tests</directory>
+        <testsuite name="Mixin">
+            <directory suffix="Test.php">tests/Mixin</directory>
+        </testsuite>
+        <testsuite name="Reflect">
+            <directory suffix="Test.php">tests/Reflect</directory>
+        </testsuite>
+        <testsuite name="Bytecode">
+            <directory suffix="Test.php">tests/Bytecode</directory>
+        </testsuite>
+        <testsuite name="Internals">
+            <directory suffix="Test.php">tests/Internals</directory>
         </testsuite>
     </testsuites>
 </phpunit>

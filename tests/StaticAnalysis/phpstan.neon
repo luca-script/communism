@@ -1,0 +1,10 @@
+includes:
+    - ../../extension.neon
+
+parameters:
+    level: max
+    paths:
+        - valid.php
+        - invalid.php
+    bootstrapFiles:
+        - ../../vendor/autoload.php

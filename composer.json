@@ -8,6 +8,9 @@
         "ext-ffi": "*",
         "ext-mbstring": "*"
     },
+    "suggest": {
+        "phpstan/phpstan": "The PHPStan plugin provided in extension.neon provides mixin analysis, which is highly recommended."
+    },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.0",
         "pestphp/pest": "^3.0",
@@ -17,7 +20,8 @@
     },
     "autoload": {
         "psr-4": {
-            "Communism\\": "src/Communism/"
+            "Communism\\": "src/Communism/",
+            "Communism_PHPStan\\": "src/Communism_PHPStan/"
         }
     },
     "autoload-dev": {
@@ -26,10 +30,20 @@
         }
     },
     "scripts": {
-        "analyse": "phpstan analyse",
+        "analyse": "phpstan analyze",
+        "analyze": "phpstan analyze",
         "format": "php-cs-fixer fix",
         "format:check": "php-cs-fixer fix --dry-run --diff",
-        "test": "pest"
+        "paratest": "pest --parallel",
+        "paratest:mixin": "pest --parallel tests/Mixin",
+        "paratest:reflect": "pest --parallel tests/Reflect",
+        "paratest:bytecode": "pest --parallel tests/Bytecode",
+        "paratest:internals": "pest --parallel tests/Internals",
+        "test": "pest",
+        "test:mixin": "pest tests/Mixin",
+        "test:reflect": "pest tests/Reflect",
+        "test:bytecode": "pest tests/Bytecode",
+        "test:internals": "pest tests/Internals"
     },
     "config": {
         "sort-packages": true,

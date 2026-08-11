@@ -1,0 +1,11 @@
+services:
+    -
+        class: Communism_PHPStan\MixinRule
+        tags:
+            - phpstan.rules.rule
+    -
+        class: Communism_PHPStan\MixinTraitRule
+        tags:
+            - phpstan.rules.rule
+    -
+        class: Communism_PHPStan\BytecodeIndex
