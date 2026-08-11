@@ -1998,7 +1998,7 @@ EOF
 void free_estring(zend_string **foo);
 
 EOF . (ZEND_THREAD_SAFE
-? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nextern int compiler_globals_id;\nextern size_t compiler_globals_offset;\nvoid *tsrm_get_ls_cache(void);\n"
+? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nextern int compiler_globals_id;\nextern size_t compiler_globals_offset;\nvoid *tsrm_get_ls_cache(void);\nvoid *ts_resource_ex(int id, void *thread_id);\n"
 : "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), $library);
                 self::functionTable();
                 break;
@@ -2056,13 +2056,13 @@ EOF . (ZEND_THREAD_SAFE
         $def = self::def();
 
         if (ZEND_THREAD_SAFE) {
-            $lsCache = $def->tsrm_get_ls_cache();
-            $address = $def->cast('uintptr_t', $lsCache)->cdata + $def->compiler_globals_offset;
+            $compilerGlobals = $def->ts_resource_ex($def->compiler_globals_id, null);
 
-            return $def->cast(
-                'zend_compiler_globals *',
-                $def->cast('char *', $address),
-            );
+            if ($compilerGlobals === null || FFI::isNull($compilerGlobals)) {
+                throw new RuntimeException('Compiler globals are not available');
+            }
+
+            return $def->cast('zend_compiler_globals *', $compilerGlobals);
         }
 
         return $def->compiler_globals;
@@ -2095,12 +2095,13 @@ EOF . (ZEND_THREAD_SAFE
         $def = self::def();
 
         if (ZEND_THREAD_SAFE) {
-            $lsCache = $def->tsrm_get_ls_cache();
-            $address = $def->cast('uintptr_t', $lsCache)->cdata + $def->executor_globals_offset;
-            return $def->cast(
-                'zend_executor_globals *',
-                $def->cast('char *', $address),
-            );
+            $executorGlobals = $def->ts_resource_ex($def->executor_globals_id, null);
+
+            if ($executorGlobals === null || FFI::isNull($executorGlobals)) {
+                throw new RuntimeException('Executor globals are not available');
+            }
+
+            return $def->cast('zend_executor_globals *', $executorGlobals);
         } else {
             return $def->executor_globals;
         }

@@ -419,9 +419,11 @@ namespace {
      * @property int $executor_globals_id
      * @property int $executor_globals_offset
      * @property \Communism_FFI\zend_executor_globals $executor_globals
+     * @property int $compiler_globals_id
      *
      * @method static FFI cdef(string $code, string|null $lib = null)
      * @method \Communism_FFI\ptr<null> tsrm_get_ls_cache()
+     * @method object|null ts_resource_ex(int $id, object|null $thread_id)
      * @method \Communism_FFI\zend_string zend_strpprintf(int $max_len, string $format, mixed ...$values)
      * @method \Communism_FFI\zend_class_entry zend_lookup_class(\Communism_FFI\zend_string $name)
      * @method void free_estring(object $foo)
@@ -474,6 +476,7 @@ namespace {
         public int $executor_globals_id;
         public int $executor_globals_offset;
         public \Communism_FFI\zend_executor_globals $executor_globals;
+        public int $compiler_globals_id;
         public int $compiler_globals_offset;
         public \Communism_FFI\zend_compiler_globals $compiler_globals;
 
