@@ -1612,9 +1612,7 @@ final class Zend
         $libraryPrefix = PHP_OS_FAMILY === 'Linux' ? 'lib' : '';
         $librarySuffix = PHP_OS_FAMILY === 'Linux' ? '.so' : '';
         $versionMinor = intdiv(PHP_VERSION_ID % 10_000, 100);
-        // REASON: RTLD_DEFAULT (see v1v) does not work on Windows, don't even try.
-        // 1: https://www.php.net/manual/en/ffi.cdef.php#refsect1-ffi.cdef-parameters
-        $libraries = PHP_OS_FAMILY === 'Windows'
+        $fallbackLibraries = PHP_OS_FAMILY === 'Windows'
             ? [
                 $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
                 $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
@@ -1626,6 +1624,15 @@ final class Zend
                 $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
             ];
 
+        // Ask the operating system for the PHP library already loaded into this
+        // process before trying names that may not exist for nightly builds.
+        $libraries = array_values(array_unique([
+            ...FindLoadedLibrary::php(),
+            ...$fallbackLibraries,
+        ]));
+
+        // REASON: RTLD_DEFAULT (see v1v) does not work on Windows, don't even try.
+        // 1: https://www.php.net/manual/en/ffi.cdef.php#refsect1-ffi.cdef-parameters
         foreach ($libraries as $library) {
             try {
                 self::$def = FFI::cdef(<<<'EOF'

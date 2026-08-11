@@ -81,6 +81,13 @@ namespace Communism_FFI {
         public int $finally_end;
     }
 
+    final class MODULEENTRY32A
+    {
+        public int $dwSize;
+        public object $szModule;
+        public object $szExePath;
+    }
+
     /**
      * @property int $refcount
      */
@@ -430,10 +437,14 @@ namespace {
      * @method int zend_hash_func(string $str, int $len)
      * @method \Communism_FFI\ptr<object> _emalloc(int $size)
      * @method void _efree(object $ptr)
-     * @method static string string(\Communism_FFI\ptr<\Communism_FFI\char> $ptr, int $len)
+     * @method static string string(object $ptr, int|null $len = null)
      * @method string|null zend_get_opcode_name(int $opcode)
      * @method int zend_get_opcode_id(string $name, int $length)
      * @method void zend_vm_set_opcode_handler(object $opcode)
+     * @method object CreateToolhelp32Snapshot(int $flags, int $processId)
+     * @method bool Module32FirstA(object $snapshot, object $module)
+     * @method bool Module32NextA(object $snapshot, object $module)
+     * @method bool CloseHandle(object $handle)
      *
      * @phpstan-method (
      *     $type is 'Bucket *' ? \Communism_FFI\Bucket :
@@ -464,7 +475,8 @@ namespace {
         /**
          * @phpstan-return (
          *     $type is 'zval' ? \Communism_FFI\zval :
-         *     ($type is 'zend_function' ? \Communism_FFI\zend_function : object)
+         *     ($type is 'zend_function' ? \Communism_FFI\zend_function :
+         *     ($type is 'MODULEENTRY32A' ? \Communism_FFI\MODULEENTRY32A : object))
          * )
          */
         public function new(string $type): object {}
@@ -472,6 +484,8 @@ namespace {
         public static function sizeof(object $value): int {}
 
         public static function memcpy(object $to, object $from, int $size): void {}
+
+        public static function isNull(object $ptr): bool {}
 
         /**
          * Get the address of an object
