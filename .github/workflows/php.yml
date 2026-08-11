@@ -11,8 +11,18 @@ permissions:
 
 jobs:
   setup:
-    name: Set up environment
-    runs-on: ubuntu-26.04
+    name: "Set up environment (${{ matrix.os.name }})"
+    strategy:
+      matrix:
+        os:
+          - name: Linux
+            id: ubuntu-26.04
+            artifact: composer-environment-linux
+          - name: Windows
+            id: windows-2025
+            artifact: composer-environment-windows
+
+    runs-on: ${{ matrix.os.id }}
 
     steps:
     - uses: actions/checkout@v4
@@ -39,7 +49,7 @@ jobs:
     - name: Share Composer environment
       uses: actions/upload-artifact@v4
       with:
-        name: composer-environment
+        name: ${{ matrix.os.artifact }}
         path: composer-environment.tar.gz
         if-no-files-found: error
         retention-days: 1
@@ -53,8 +63,10 @@ jobs:
         os:
           - name: Linux
             id: ubuntu-26.04
+            artifact: composer-environment-linux
           - name: Windows
             id: windows-2025
+            artifact: composer-environment-windows
         php_version: ['8.4', '8.5']
         suite: [mixin, reflect, bytecode, internals]
 
@@ -95,7 +107,7 @@ jobs:
     - name: Restore Composer environment
       uses: actions/download-artifact@v4
       with:
-        name: composer-environment
+        name: ${{ matrix.os.artifact }}
 
     - name: Extract Composer environment
       shell: bash
