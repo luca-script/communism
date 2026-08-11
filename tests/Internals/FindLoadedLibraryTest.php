@@ -8,7 +8,13 @@ it('finds loaded PHP libraries through the operating system', function (): void 
     $libraries = FindLoadedLibrary::php();
 
     expect($libraries)->toBeArray();
-    expect(count($libraries))->toBeGreaterThan(0);
+
+    // A statically linked Linux CLI has no libphp*.so mapping. In that case
+    // Zend falls through to RTLD_DEFAULT, which is covered by the bytecode
+    // tests. Windows PHP always exposes php*.dll through ToolHelp.
+    if (PHP_OS_FAMILY === 'Windows') {
+        expect(count($libraries))->toBeGreaterThan(0);
+    }
 
     foreach ($libraries as $library) {
         expect($library)->toBeString();
