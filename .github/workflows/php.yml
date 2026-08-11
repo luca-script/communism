@@ -10,27 +10,55 @@ permissions:
   contents: read
 
 jobs:
+  setup:
+    name: Set up environment
+    runs-on: ubuntu-26.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up PHP with FFI
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.4'
+        extensions: ffi, mbstring
+        ini-values: ffi.enable=true
+        coverage: none
+      env:
+        fail-fast: true
+
+    - name: Validate composer.json and composer.lock
+      run: composer validate --strict
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress --no-interaction
+
+    - name: Archive Composer environment
+      run: tar -czf composer-environment.tar.gz vendor
+
+    - name: Share Composer environment
+      uses: actions/upload-artifact@v4
+      with:
+        name: composer-environment
+        path: composer-environment.tar.gz
+        if-no-files-found: error
+        retention-days: 1
+
   test:
-    name: "${{ matrix.os_name }} (PHP ${{ matrix.php_version }}) - ${{ matrix.suite }}"
+    needs: setup
+    name: "${{ matrix.os.name }} (PHP ${{ matrix.php_version }}) - ${{ matrix.suite }}"
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-26.04
-            os_name: Linux
-            php_version: '8.4'
-          - os: ubuntu-26.04
-            os_name: Linux
-            php_version: '8.5'
-          - os: windows-2025
-            os_name: Windows
-            php_version: '8.4'
-          - os: windows-2025
-            os_name: Windows
-            php_version: '8.5'
+        os:
+          - name: Linux
+            id: ubuntu-26.04
+          - name: Windows
+            id: windows-2025
+        php_version: ['8.4', '8.5']
         suite: [mixin, reflect, bytecode, internals]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os.id }}
 
     steps:
     - uses: actions/checkout@v4
@@ -64,19 +92,14 @@ jobs:
           echo "FFI is working\n";
         '
 
-    - name: Validate composer.json and composer.lock
-      run: composer validate --strict
-
-    - name: Cache Composer packages
-      uses: actions/cache@v4
+    - name: Restore Composer environment
+      uses: actions/download-artifact@v4
       with:
-        path: vendor
-        key: ${{ runner.os }}-php-${{ matrix.php_version }}-${{ hashFiles('**/composer.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-php-${{ matrix.php_version }}-
+        name: composer-environment
 
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress
+    - name: Extract Composer environment
+      shell: bash
+      run: tar -xzf composer-environment.tar.gz
 
     - name: Run ${{ matrix.suite }} test suite
       run: composer run-script test:${{ matrix.suite }}
