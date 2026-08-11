@@ -1618,10 +1618,14 @@ final class Zend
                 $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
             ]
             : [
-                // Bind to the active CLI process before trying a separate libphp instance.
+                // Bind to the active process before trying a separate libphp
+                // instance. Linux PHP packages use the same library filename
+                // for TS and NTS; the ABI is selected by the package itself,
+                // not by adding "ts" to the filename.
                 null,
-                $libraryPrefix . 'php8' . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
-                $libraryPrefix . 'php8.' . $versionMinor . (ZEND_THREAD_SAFE ? 'ts' : '') . $librarySuffix,
+                $libraryPrefix . 'php8.' . $versionMinor . $librarySuffix,
+                $libraryPrefix . 'php8' . $librarySuffix,
+                $libraryPrefix . 'php' . $librarySuffix,
             ];
 
         // Ask the operating system for the PHP library already loaded into this
