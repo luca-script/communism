@@ -1822,6 +1822,7 @@ EOF . (self::supportsPhp86() ? "        uint32_t fn_flags2;\n" : '') . <<<'EOF'
         void *run_time_cache__ptr;
         zend_string *doc_comment;
         uint32_t T;
+EOF . (self::supportsPhp86() ? "        uint32_t fn_flags2;\n" : '') . <<<'EOF'
         const zend_property_info *prop_info;
         int cache_size;
         int last_var;
