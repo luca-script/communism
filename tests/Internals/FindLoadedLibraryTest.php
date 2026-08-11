@@ -19,15 +19,20 @@ it('finds loaded PHP libraries through the operating system', function (): void 
     foreach ($libraries as $library) {
         expect($library)->toBeString();
         expect(strtolower($library))->toContain('php');
+        if (PHP_OS_FAMILY === 'Linux') {
+            expect(FindLoadedLibrary::isLoaded($library))->toBeTrue();
+        }
     }
 });
 
 it('enumerates PHP shared objects through the Linux dynamic loader', function (): void {
+    $method = new ReflectionMethod(FindLoadedLibrary::class, 'phpFromDlIteratePhdr');
+
+    expect($method->isPrivate())->toBeTrue();
+
     if (PHP_OS_FAMILY !== 'Linux') {
         return;
     }
-
-    $method = new ReflectionMethod(FindLoadedLibrary::class, 'phpFromDlIteratePhdr');
 
     /** @var list<string> $libraries */
     $libraries = $method->invoke(null);

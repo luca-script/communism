@@ -36,6 +36,19 @@ use FFI;
  */
 final class FindLoadedLibrary
 {
+    public static function isLoaded(string $library): bool
+    {
+        if (PHP_OS_FAMILY === 'Linux') {
+            return self::isLoadedOnLinux($library);
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            return in_array($library, self::phpOnWindows(), true);
+        }
+
+        return false;
+    }
+
     /** @return list<string> */
     public static function php(): array
     {
@@ -108,6 +121,26 @@ CDEF);
             return $libraries;
         } catch (\Throwable) {
             return [];
+        }
+    }
+
+    private static function isLoadedOnLinux(string $library): bool
+    {
+        try {
+            $ffi = FFI::cdef(<<<'CDEF'
+void *dlopen(const char *filename, int flags);
+int dlclose(void *handle);
+CDEF);
+
+            $handle = $ffi->dlopen($library, 0x00001 | 0x00004); // RTLD_LAZY | RTLD_NOLOAD
+            if ($handle === null || FFI::isNull($handle)) {
+                return false;
+            }
+
+            $ffi->dlclose($handle);
+            return true;
+        } catch (\Throwable) {
+            return false;
         }
     }
 

@@ -448,6 +448,8 @@ namespace {
      * @method bool Module32Next(object $snapshot, object $module)
      * @method bool CloseHandle(object $handle)
      * @method int dl_iterate_phdr(callable $callback, object|null $data)
+     * @method object|null dlopen(string $filename, int $flags)
+     * @method int dlclose(object $handle)
      *
      * @phpstan-method (
      *     $type is 'Bucket *' ? \Communism_FFI\Bucket :

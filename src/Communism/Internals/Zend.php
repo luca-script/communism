@@ -1639,6 +1639,18 @@ final class Zend
         // REASON: RTLD_DEFAULT (see v1v) does not work on Windows, don't even try.
         // 1: https://www.php.net/manual/en/ffi.cdef.php#refsect1-ffi.cdef-parameters
         foreach ($libraries as $library) {
+            if (PHP_OS_FAMILY === 'Linux' && $library !== null && !FindLoadedLibrary::isLoaded($library)) {
+                $errors[] = $library . ': not loaded (RTLD_NOLOAD)';
+
+                if ($library === $libraries[array_key_last($libraries)]) {
+                    throw new RuntimeException(
+                        "Unable to load the Zend FFI binding:\n" . implode("\n", $errors),
+                    );
+                }
+
+                continue;
+            }
+
             try {
                 self::$def = FFI::cdef(<<<'EOF'
 typedef struct _zval_struct zval;
@@ -1988,8 +2000,9 @@ void free_estring(zend_string **foo);
 EOF . (ZEND_THREAD_SAFE
 ? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nextern int compiler_globals_id;\nextern size_t compiler_globals_offset;\nvoid *tsrm_get_ls_cache(void);\n"
 : "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), $library);
+                self::functionTable();
                 break;
-            } catch (\FFI\Exception $exception) {
+            } catch (\FFI\Exception|RuntimeException $exception) {
                 $errors[] = ($library ?? 'RTLD_DEFAULT') . ': ' . $exception->getMessage();
 
                 // If we are at the last library, report every attempted
