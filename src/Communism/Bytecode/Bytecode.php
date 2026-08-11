@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Bytecode.php                                                         *
+ * Consumer: Users                                                            *
  * Purpose: Interact with userland bytecode                                   *
  *============================================================================*/
 

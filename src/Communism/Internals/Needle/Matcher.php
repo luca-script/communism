@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Matcher.php                                                          *
+ * Consumer: Internal                                                         *
  * Purpose: Source file for Matcher.php.                                      *
  *============================================================================*/
 

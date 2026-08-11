@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Pseudo.php                                                           *
+ * Consumer: Users                                                            *
  * Purpose: Marks a mixin whose target may be absent.                         *
  *============================================================================*/
 

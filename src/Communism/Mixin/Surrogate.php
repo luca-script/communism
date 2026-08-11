@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Surrogate.php                                                        *
+ * Consumer: Users                                                            *
  * Purpose: Marks a Mixin-compatible fallback callback handler.               *
  *============================================================================*/
 

@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: MixinTraitRule.php                                                   *
+ * Consumer: Users                                                            *
  * Purpose: Source file for MixinTraitRule.php.                               *
  *============================================================================*/
 

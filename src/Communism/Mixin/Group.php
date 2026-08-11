@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Group.php                                                            *
+ * Consumer: Users                                                            *
  * Purpose: Source file for Group.php.                                        *
  *============================================================================*/
 

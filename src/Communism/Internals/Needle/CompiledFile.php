@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: CompiledFile.php                                                     *
+ * Consumer: Internal                                                         *
  * Purpose: Snapshot of a compile-only Zend file op array.                    *
  *============================================================================*/
 

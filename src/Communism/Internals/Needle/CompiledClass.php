@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: CompiledClass.php                                                    *
+ * Consumer: Internal                                                         *
  * Purpose: Source file for CompiledClass.php.                                *
  *============================================================================*/
 

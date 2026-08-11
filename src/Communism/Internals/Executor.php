@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Executor.php                                                         *
+ * Consumer: Internal                                                         *
  * Purpose: Allows modification of PHP executor globals                       *
  *============================================================================*/
 

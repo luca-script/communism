@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Compiler.php                                                         *
+ * Consumer: Internal                                                         *
  * Purpose: Compile PHP files to detached, non-executing bytecode snapshots.  *
  *============================================================================*/
 

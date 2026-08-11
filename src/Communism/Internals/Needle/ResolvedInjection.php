@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: ResolvedInjection.php                                                *
+ * Consumer: Internal                                                         *
  * Purpose: Source file for ResolvedInjection.php.                            *
  *============================================================================*/
 

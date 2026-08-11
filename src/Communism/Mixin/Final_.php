@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Final_.php                                                           *
+ * Consumer: Users                                                            *
  * Purpose: Declares a final Mixin member.                                    *
  *============================================================================*/
 

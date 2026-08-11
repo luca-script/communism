@@ -34,7 +34,7 @@ return (new PhpCsFixer\Config())
                 'Communism/common_header' => static function (SplFileInfo $file): bool {
                     $path = str_replace('\\', '/', $file->getPathname());
 
-                    return str_contains($path, 'src/Communism/');
+                    return str_contains($path, 'src/Communism/') || str_contains($path, 'src/Communism_PHPStan/');
                 },
             ];
         }
@@ -48,6 +48,11 @@ return (new PhpCsFixer\Config())
             'license_name' => '0BSD',
             'license_text' => file_get_contents(__DIR__ . '/LICENSE'),
             'header_width' => 80,
+            'allowed_consumers' => ['Users', 'Internal'],
+            'defaults_regex' => [
+                '~src/Communism/Internals/~' => ['consumer' => 'Internal'],
+                '~src/Communism(?:_PHPStan)?/~' => ['consumer' => 'Users'],
+            ],
         ],
     ])
     ->setFinder($finder);

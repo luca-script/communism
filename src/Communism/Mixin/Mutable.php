@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Mutable.php                                                          *
+ * Consumer: Users                                                            *
  * Purpose: Declares a mutable Mixin shadow.                                  *
  *============================================================================*/
 

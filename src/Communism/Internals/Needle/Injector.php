@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Injector.php                                                         *
+ * Consumer: Internal                                                         *
  * Purpose: Source file for Injector.php.                                     *
  *============================================================================*/
 

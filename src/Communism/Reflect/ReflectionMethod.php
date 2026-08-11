@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: ReflectionMethod.php                                                 *
+ * Consumer: Users                                                            *
  * Purpose: High-level wrapper to perform powerful reflection on methods      *
  *============================================================================*/
 

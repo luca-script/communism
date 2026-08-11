@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Zend.php                                                             *
+ * Consumer: Internal                                                         *
  * Purpose: Unsafe access to PHP internals; NOT FOR PUBLIC CONSUMPTION! It is *
  *          very easy to crash PHP this way.                                  *
  *============================================================================*/

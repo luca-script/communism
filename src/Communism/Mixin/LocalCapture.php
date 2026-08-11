@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: LocalCapture.php                                                     *
+ * Consumer: Users                                                            *
  * Purpose: Controls local-variable capture for callback injections.          *
  *============================================================================*/
 

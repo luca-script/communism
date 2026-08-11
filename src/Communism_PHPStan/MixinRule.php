@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: MixinRule.php                                                        *
+ * Consumer: Users                                                            *
  * Purpose: PHPStan validation for Mixin target declarations.                 *
  *============================================================================*/
 

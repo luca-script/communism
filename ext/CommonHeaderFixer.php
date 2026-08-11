@@ -33,14 +33,17 @@ use function substr;
 use function trim;
 
 /**
- * @implements ConfigurableFixerInterface<array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int}, array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int}>
+ * @implements ConfigurableFixerInterface<array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}, array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}>
  */
 final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixerInterface, WhitespacesAwareFixerInterface
 {
-    /** @use ConfigurableFixerTrait<array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int}, array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int}> */
+    /** @use ConfigurableFixerTrait<array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}, array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}> */
     use ConfigurableFixerTrait;
 
     private const MIN_HEADER_WIDTH = 20;
+
+    /** @var list<string> */
+    private const CONSUMERS = ['Users', 'Internal', 'Deprecated'];
 
     public function getName(): string
     {
@@ -129,6 +132,44 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
                     return $value;
                 })
                 ->getOption(),
+            (new FixerOptionBuilder('allowed_consumers', 'Consumer values permitted in common headers.'))
+                ->setAllowedTypes(['array'])
+                ->setNormalizer(static function (Options $options, array $value) use ($fixerName): array {
+                    $consumers = [];
+                    foreach ($value as $consumer) {
+                        if (!is_string($consumer) || !in_array($consumer, self::CONSUMERS, true)) {
+                            throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, sprintf('Consumer must be one of: %s.', implode(', ', self::CONSUMERS)));
+                        }
+
+                        if (!in_array($consumer, $consumers, true)) {
+                            $consumers[] = $consumer;
+                        }
+                    }
+
+                    if ([] === $consumers) {
+                        throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'At least one consumer must be permitted.');
+                    }
+
+                    return $consumers;
+                })
+                ->getOption(),
+            (new FixerOptionBuilder('defaults_regex', 'Ordered path regular expressions mapped to default consumer values.'))
+                ->setAllowedTypes(['array'])
+                ->setNormalizer(static function (Options $options, array $value) use ($fixerName): array {
+                    foreach ($value as $regex => $default) {
+                        $consumer = is_array($default) ? ($default['consumer'] ?? null) : null;
+                        if (!is_string($regex) || !is_array($default) || !is_string($consumer) || false === preg_match($regex, '') || !in_array($consumer, self::CONSUMERS, true)) {
+                            throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'defaults_regex must map valid regular expressions to known consumer values.');
+                        }
+                    }
+
+                    if ([] === $value) {
+                        throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'defaults_regex must contain at least one rule.');
+                    }
+
+                    return $value;
+                })
+                ->getOption(),
         ]);
     }
 
@@ -151,13 +192,24 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
     {
         $code = $tokens->generateCode();
         $eol = $this->detectLineEnding($code);
+        $properties = $this->extractHeaderProperties($code);
+        $existingConsumer = $properties['Consumer'] ?? null;
+        if (null !== $existingConsumer && !in_array($existingConsumer, $this->allowedConsumers(), true)) {
+            throw new \LogicException(sprintf('Consumer "%s" in %s is not permitted by CommonHeaderFixer configuration.', $existingConsumer, $file->getPathname()));
+        }
+
+        $consumer = $this->consumerFor($file);
+        if (!in_array($consumer, $this->allowedConsumers(), true)) {
+            throw new \LogicException(sprintf('Consumer "%s" required for %s is not permitted by CommonHeaderFixer configuration.', $consumer, $file->getPathname()));
+        }
+
         $purpose = $this->extractPurpose($code);
 
         if (null === $purpose || mb_strlen(trim($purpose)) <= 15) {
             $purpose = sprintf('Source file for %s.', $file->getBasename());
         }
 
-        $normalized = $this->buildHeader($file->getBasename(), $purpose, $eol) . $this->extractBody($code);
+        $normalized = $this->buildHeader($file->getBasename(), $consumer, $purpose, $eol) . $this->extractBody($code);
         $tokens->setCode($normalized);
     }
 
@@ -173,7 +225,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
         return "\n";
     }
 
-    private function buildHeader(string $fileName, string $purpose, string $eol): string
+    private function buildHeader(string $fileName, string $consumer, string $purpose, string $eol): string
     {
         $year = (new \DateTimeImmutable('now'))->format('Y');
 
@@ -190,6 +242,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
             $this->formatHeaderLine($this->tagline()),
             $this->ruleBorder(),
             $this->formatHeaderLine(sprintf('File: %s', $fileName)),
+            $this->formatHeaderLine(sprintf('Consumer: %s', $consumer)),
             ...$this->formatPurposeLines($purpose),
             $this->closeBorder(),
             '',
@@ -298,6 +351,31 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
     private function headerContentWidth(): int
     {
         return $this->headerWidth() - 6;
+    }
+
+    private function consumerFor(\SplFileInfo $file): string
+    {
+        $path = str_replace('\\', '/', $file->getPathname());
+
+        foreach ($this->defaultsRegex() as $regex => $default) {
+            if (1 === preg_match($regex, $path)) {
+                return $default['consumer'];
+            }
+        }
+
+        throw new \LogicException(sprintf('No defaults_regex rule matched %s.', $file->getPathname()));
+    }
+
+    /** @return list<string> */
+    private function allowedConsumers(): array
+    {
+        return $this->configured()['allowed_consumers'];
+    }
+
+    /** @return array<string, array{consumer: string}> */
+    private function defaultsRegex(): array
+    {
+        return $this->configured()['defaults_regex'];
     }
 
     private function topBorder(): string
@@ -557,7 +635,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
     }
 
     /**
-     * @return array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int}
+     * @return array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}
      */
     private function configured(): array
     {

@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: CallbackInfoReturnable.php                                           *
+ * Consumer: Users                                                            *
  * Purpose: Virtual returnable callback state for injection handlers.         *
  *============================================================================*/
 

@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: AccessorInvokerRuntime.php                                           *
+ * Consumer: Internal                                                         *
  * Purpose: Runtime implementation for generated Mixin accessors/invokers.    *
  *============================================================================*/
 

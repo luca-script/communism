@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Coerce.php                                                           *
+ * Consumer: Users                                                            *
  * Purpose: Opts a Mixin handler parameter into compatible type coercion.     *
  *============================================================================*/
 

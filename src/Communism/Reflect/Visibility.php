@@ -19,6 +19,7 @@
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
  * File: Visibility.php                                                       *
+ * Consumer: Users                                                            *
  * Purpose: Visibility enum used for property visibility                      *
  *============================================================================*/
 
