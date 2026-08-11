@@ -25,7 +25,7 @@ jobs:
     runs-on: ${{ matrix.os.id }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Set up PHP with FFI
       uses: shivammathur/setup-php@v2
@@ -91,7 +91,7 @@ jobs:
     runs-on: ${{ matrix.os.id }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Set up PHP with FFI
       uses: shivammathur/setup-php@v2
