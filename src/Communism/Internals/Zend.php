@@ -1634,6 +1634,7 @@ final class Zend
             ...FindLoadedLibrary::php(),
             ...$fallbackLibraries,
         ]));
+        $errors = [];
 
         // REASON: RTLD_DEFAULT (see v1v) does not work on Windows, don't even try.
         // 1: https://www.php.net/manual/en/ffi.cdef.php#refsect1-ffi.cdef-parameters
@@ -1900,7 +1901,6 @@ typedef struct _zend_compiler_globals {
     zend_file_context file_context;
     zend_arena *arena;
 } zend_compiler_globals;
-extern zend_compiler_globals compiler_globals;
 extern zend_op_array *(*zend_compile_file)(zend_file_handle *file_handle, int type);
 zend_op_array *compile_file(zend_file_handle *file_handle, int type);
 void zend_stream_init_filename(zend_file_handle *handle, const char *filename);
@@ -1990,10 +1990,17 @@ EOF . (ZEND_THREAD_SAFE
 : "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), $library);
                 break;
             } catch (\FFI\Exception $exception) {
-                // If we are at the last library, re-throw it
-                // TODO: Possibly make this have a clearer exception
+                $errors[] = ($library ?? 'RTLD_DEFAULT') . ': ' . $exception->getMessage();
+
+                // If we are at the last library, report every attempted
+                // handle. This is especially useful for TS builds, whose
+                // library filename is not standardized across distributions.
                 if ($library === $libraries[array_key_last($libraries)]) {
-                    throw $exception;
+                    throw new \RuntimeException(
+                        "Unable to load the Zend FFI binding:\n" . implode("\n", $errors),
+                        0,
+                        $exception,
+                    );
                 }
             }
         }

@@ -22,6 +22,22 @@ it('finds loaded PHP libraries through the operating system', function (): void 
     }
 });
 
+it('enumerates PHP shared objects through the Linux dynamic loader', function (): void {
+    if (PHP_OS_FAMILY !== 'Linux') {
+        return;
+    }
+
+    $method = new ReflectionMethod(FindLoadedLibrary::class, 'phpFromDlIteratePhdr');
+
+    /** @var list<string> $libraries */
+    $libraries = $method->invoke(null);
+
+    expect($libraries)->toBeArray();
+    foreach ($libraries as $library) {
+        expect($library)->toContain('php');
+    }
+});
+
 it('parses normal and deleted Linux library mappings', function (): void {
     $method = new ReflectionMethod(FindLoadedLibrary::class, 'phpFromLinuxMaps');
 

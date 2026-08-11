@@ -408,6 +408,8 @@ namespace Communism_FFI {
 namespace FFI {
     abstract class CData
     {
+        /** @var object */
+        public object $dlpi_name;
         public int $cdata;
     }
 }
@@ -445,6 +447,7 @@ namespace {
      * @method bool Module32First(object $snapshot, object $module)
      * @method bool Module32Next(object $snapshot, object $module)
      * @method bool CloseHandle(object $handle)
+     * @method int dl_iterate_phdr(callable $callback, object|null $data)
      *
      * @phpstan-method (
      *     $type is 'Bucket *' ? \Communism_FFI\Bucket :
