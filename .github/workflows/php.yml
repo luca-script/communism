@@ -68,7 +68,7 @@ jobs:
             id: windows-2025
             artifact: composer-environment-windows
         php_version: ['8.4', '8.5']
-        suite: [mixin, reflect, bytecode, internals]
+        suite: [mixin, reflect, bytecode, internals, maintenance]
 
     runs-on: ${{ matrix.os.id }}
 
@@ -112,6 +112,16 @@ jobs:
     - name: Extract Composer environment
       shell: bash
       run: tar -xzf composer-environment.tar.gz
+
+    - name: Add Composer binaries to PATH (Linux)
+      if: matrix.os.name == 'Linux'
+      shell: bash
+      run: echo "$GITHUB_WORKSPACE/vendor/bin" >> "$GITHUB_PATH"
+
+    - name: Add Composer binaries to PATH (Windows)
+      if: matrix.os.name == 'Windows'
+      shell: pwsh
+      run: Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:GITHUB_WORKSPACE 'vendor\bin')
 
     - name: Run ${{ matrix.suite }} test suite
       run: composer run-script test:${{ matrix.suite }}

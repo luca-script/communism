@@ -20,5 +20,8 @@
         <testsuite name="Internals">
             <directory suffix="Test.php">tests/Internals</directory>
         </testsuite>
+        <testsuite name="Maintenance">
+            <directory suffix="Test.php">tests/Maintenance</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

@@ -39,11 +39,13 @@
         "paratest:reflect": "pest --parallel tests/Reflect",
         "paratest:bytecode": "pest --parallel tests/Bytecode",
         "paratest:internals": "pest --parallel tests/Internals",
+        "paratest:maintenance": "pest --parallel tests/Maintenance",
         "test": "pest",
         "test:mixin": "pest tests/Mixin",
         "test:reflect": "pest tests/Reflect",
         "test:bytecode": "pest tests/Bytecode",
-        "test:internals": "pest tests/Internals"
+        "test:internals": "pest tests/Internals",
+        "test:maintenance": "pest tests/Maintenance"
     },
     "config": {
         "sort-packages": true,
