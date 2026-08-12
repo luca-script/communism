@@ -252,4 +252,4 @@ jobs:
         name: php-crash-dumps-${{ matrix.php.name }}-${{ matrix.suite }}
         path: ${{ runner.temp }}/php-crash-dumps
         if-no-files-found: ignore
-        retention-days: 7
+        retention-days: 3
