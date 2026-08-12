@@ -142,5 +142,49 @@ jobs:
       shell: pwsh
       run: Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:GITHUB_WORKSPACE 'vendor\bin')
 
+    - name: Set up ProcDump (Windows)
+      if: matrix.os.name == 'Windows'
+      shell: pwsh
+      run: |
+        $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
+        New-Item -ItemType Directory -Path $dumpDirectory -Force | Out-Null
+        $archive = Join-Path $env:RUNNER_TEMP 'procdump.zip'
+        $procdumpDirectory = Join-Path $env:RUNNER_TEMP 'procdump'
+        Invoke-WebRequest -Uri 'https://download.sysinternals.com/files/Procdump.zip' -OutFile $archive
+        Expand-Archive -Path $archive -DestinationPath $procdumpDirectory -Force
+        Add-Content -Path $env:GITHUB_PATH -Value $procdumpDirectory
+
     - name: Run ${{ matrix.suite }} test suite
+      if: matrix.os.name != 'Windows'
       run: composer run-script test:${{ matrix.suite }}
+
+    - name: Run ${{ matrix.suite }} under ProcDump (Windows)
+      if: matrix.os.name == 'Windows'
+      shell: pwsh
+      run: |
+        $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
+        $php = (Get-Command php).Source
+        & (Join-Path $env:RUNNER_TEMP 'procdump\procdump.exe') -accepteula -ma -e -x $dumpDirectory $php 'vendor/bin/pest' ('tests\' + '${{ matrix.suite }}')
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+
+    - name: Collect PHP debug files (Windows)
+      if: failure() && matrix.os.name == 'Windows'
+      shell: pwsh
+      run: |
+        $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
+        $symbols = Join-Path $dumpDirectory 'symbols'
+        $phpDirectory = Split-Path (Get-Command php).Source
+        New-Item -ItemType Directory -Path $symbols -Force | Out-Null
+        Get-ChildItem -Path $phpDirectory -File -Include '*.exe', '*.dll', '*.pdb' | Copy-Item -Destination $symbols -Force
+        Get-ChildItem -Path (Join-Path $phpDirectory 'ext') -File -Include '*.dll', '*.pdb' | Copy-Item -Destination $symbols -Force
+
+    - name: Upload PHP crash dumps (Windows)
+      if: failure() && matrix.os.name == 'Windows'
+      uses: actions/upload-artifact@v7
+      with:
+        name: php-crash-dumps-${{ matrix.php.name }}-${{ matrix.suite }}
+        path: ${{ runner.temp }}/php-crash-dumps
+        if-no-files-found: ignore
+        retention-days: 7
