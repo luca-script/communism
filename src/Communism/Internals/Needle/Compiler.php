@@ -223,10 +223,15 @@ final class Compiler
             return;
         }
 
-        $buckets = $table->arData;
         $ffi = Zend::ffi();
+
+        // Do not keep a Bucket* CData value while mutating the hash table.
+        // Deleting an entry can invalidate the table storage (and its FFI
+        // pointer), leaving later field reads pointed at freed memory.
+        /** @var list<array{key: string, length: int}> $entries */
+        $entries = [];
         for ($index = $end - 1; $index >= $originalCount; $index--) {
-            $bucket = $buckets[$index];
+            $bucket = $table->arData[$index];
             if ($bucket->val->value->ptr === null) {
                 continue;
             }
@@ -236,7 +241,14 @@ final class Compiler
             }
 
             $key = \FFI::string($ffi->cast('char *', $bucket->key->val), $bucket->key->len);
-            $ffi->zend_hash_str_del($table, $key, $bucket->key->len);
+            $entries[] = ['key' => $key, 'length' => $bucket->key->len];
+        }
+
+        // Release the last Bucket* CData reference before changing arData.
+        $bucket = null;
+
+        foreach ($entries as $entry) {
+            $ffi->zend_hash_str_del($table, $entry['key'], $entry['length']);
         }
     }
 
