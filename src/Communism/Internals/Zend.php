@@ -1979,7 +1979,7 @@ EOF : '') . <<<'EOF'
 void *  zend_hash_str_find_ptr_lc(const HashTable *ht, const char *str, size_t len);
 
 EOF
-. "void {$callingConvention} zend_hash_del_bucket(HashTable *ht, Bucket *bucket);\n"
+. "int {$callingConvention} zend_hash_str_del(HashTable *ht, const char *key, size_t len);\n"
 . "zval * {$callingConvention} zend_hash_str_find(const HashTable *ht, const char *key, size_t len);\n"
 . "zval * {$callingConvention} zend_hash_str_update(HashTable *ht, const char *key, size_t len, zval *pData);\n"
 . "zval * {$callingConvention} zend_hash_set_bucket_key(HashTable *ht, Bucket *p, zend_string *key);\n"

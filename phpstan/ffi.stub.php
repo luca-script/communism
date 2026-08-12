@@ -436,7 +436,7 @@ namespace {
      * @method \Communism_FFI\zval|null zend_hash_str_update(\Communism_FFI\ptr<\Communism_FFI\HashTable>|\Communism_FFI\HashTable $ht, string $key, int $len, object $value)
      * @method \Communism_FFI\Bucket|null zend_hash_set_bucket_key(\Communism_FFI\HashTable $ht, \Communism_FFI\Bucket $p, \Communism_FFI\zend_string $key)
      * @method void zend_class_init_statics(\Communism_FFI\zend_class_entry $class_type)
-     * @method void zend_hash_del_bucket(\Communism_FFI\HashTable $ht, object $bucket)
+     * @method int zend_hash_str_del(\Communism_FFI\HashTable $ht, string $key, int $len)
      * @method void zend_stream_init_filename(object $handle, string $filename)
      * @method void zend_destroy_file_handle(object $handle)
      * @method \Communism_FFI\zend_op_array|null compile_file(object $handle, int $type)

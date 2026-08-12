@@ -231,11 +231,12 @@ final class Compiler
                 continue;
             }
 
-            // zend_hash_del_bucket() derives the bucket index by subtracting
-            // this pointer from ht->arData.  Passing the address of the local
-            // copy above therefore gives Zend a pointer outside the table and
-            // can corrupt memory.  Take the address of the actual table slot.
-            $ffi->zend_hash_del_bucket($table, \FFI::addr($buckets[$index]));
+            if ($bucket->key === null) {
+                continue;
+            }
+
+            $key = \FFI::string($ffi->cast('char *', $bucket->key->val), $bucket->key->len);
+            $ffi->zend_hash_str_del($table, $key, $bucket->key->len);
         }
     }
 
