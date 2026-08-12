@@ -164,9 +164,42 @@ jobs:
       run: |
         $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
         $php = (Get-Command php).Source
-        & (Join-Path $env:RUNNER_TEMP 'procdump\procdump.exe') -accepteula -ma -e 1 -f C0000005 -x $dumpDirectory $php 'vendor/bin/pest' ('tests\' + '${{ matrix.suite }}')
-        if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
+        $procdump = Join-Path $env:RUNNER_TEMP 'procdump\procdump.exe'
+
+        # ProcDump's own exit status describes the monitor, not the process it
+        # watched. Run PHP separately so the test result remains authoritative.
+        $monitor = Start-Process -FilePath $procdump -ArgumentList @(
+            '-accepteula',
+            '-ma',
+            '-e',
+            '1',
+            '-f',
+            'C0000005',
+            '-w',
+            'php.exe',
+            $dumpDirectory
+        ) -PassThru -NoNewWindow
+
+        Start-Sleep -Milliseconds 250
+        if ($monitor.HasExited) {
+            throw "ProcDump exited before PHP was started (exit code $($monitor.ExitCode))"
+        }
+
+        try {
+            & $php 'vendor/bin/pest' ('tests\' + '${{ matrix.suite }}')
+            $phpExitCode = $LASTEXITCODE
+        } finally {
+            if (-not $monitor.HasExited) {
+                $monitor.WaitForExit(30000) | Out-Null
+            }
+
+            if (-not $monitor.HasExited) {
+                Stop-Process -Id $monitor.Id -Force
+            }
+        }
+
+        if ($phpExitCode -ne 0) {
+            exit $phpExitCode
         }
 
     - name: Collect PHP debug files (Windows)
@@ -177,8 +210,12 @@ jobs:
         $symbols = Join-Path $dumpDirectory 'symbols'
         $phpDirectory = Split-Path (Get-Command php).Source
         New-Item -ItemType Directory -Path $symbols -Force | Out-Null
-        Get-ChildItem -Path $phpDirectory -File -Include '*.exe', '*.dll', '*.pdb' | Copy-Item -Destination $symbols -Force
-        Get-ChildItem -Path (Join-Path $phpDirectory 'ext') -File -Include '*.dll', '*.pdb' | Copy-Item -Destination $symbols -Force
+        Get-ChildItem -Path $phpDirectory -File |
+            Where-Object Extension -in '.exe', '.dll', '.pdb' |
+            Copy-Item -Destination $symbols -Force
+        Get-ChildItem -Path (Join-Path $phpDirectory 'ext') -File |
+            Where-Object Extension -in '.dll', '.pdb' |
+            Copy-Item -Destination $symbols -Force
 
     - name: Upload PHP crash dumps (Windows)
       if: failure() && matrix.os.name == 'Windows'
