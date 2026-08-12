@@ -298,7 +298,7 @@ final readonly class ReflectionProperty
 
     private function writeStaticValue(mixed $value): void
     {
-        $this->reflection->setValue($value);
+        $this->reflection->setValue(null, $value);
     }
 
     private function writeValueOnInstance(object $instance, mixed $value): void

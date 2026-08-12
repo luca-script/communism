@@ -35,8 +35,8 @@ final class Executor
     /**
      * Swaps two functions from the perspective of the global function table.
      *
-     * @param callable-string $functionA
-     * @param callable-string $functionB
+     * @param string $functionA
+     * @param string $functionB
      * @return void
      */
     public static function swapFunctions(string $functionA, string $functionB): void

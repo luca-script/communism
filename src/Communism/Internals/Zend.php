@@ -603,8 +603,8 @@ final class Zend
     /**
      * Swaps the two functions in the global function HashTable
      *
-     * @param callable-string $functionA
-     * @param callable-string $functionB
+     * @param string $functionA
+     * @param string $functionB
      * @return void
      */
     public static function swapFunctions(string $functionA, string $functionB): void
@@ -1462,7 +1462,7 @@ final class Zend
     /**
      * Mutation of runtime metadata can leave JIT assumptions stale.
      *
-     * @param callable-string $function
+     * @param string $function
      */
     public static function disableJitForFunction(string $function): void
     {
@@ -1477,6 +1477,10 @@ final class Zend
 
         $func = self::lookupFunction($function);
         if ($func === null || $func->type !== self::ZEND_USER_FUNCTION || $func->op_array->opcodes === null) {
+            return;
+        }
+
+        if (!is_callable($function)) {
             return;
         }
 
