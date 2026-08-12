@@ -2088,6 +2088,7 @@ EOF . (ZEND_THREAD_SAFE
         // PHP development snapshots report versions such as 8.6.0-dev.
         // version_compare() sorts those below the unreleased 8.6.0 stable
         // version even though their ABI already contains the 8.6 layout.
+        // @phpstan-ignore greaterOrEqual.alwaysFalse
         return PHP_VERSION_ID >= 80_600;
     }
 
