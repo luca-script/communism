@@ -2,9 +2,9 @@ name: Run Checks
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "staging", "experimental" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "staging", "experimental" ]
 
 permissions:
   contents: read
