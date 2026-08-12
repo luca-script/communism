@@ -153,24 +153,21 @@ jobs:
         Invoke-WebRequest -Uri 'https://download.sysinternals.com/files/Procdump.zip' -OutFile $archive
         Expand-Archive -Path $archive -DestinationPath $procdumpDirectory -Force
         Add-Content -Path $env:GITHUB_PATH -Value $procdumpDirectory
-        & (Join-Path $procdumpDirectory 'procdump.exe') -accepteula -ma -i $dumpDirectory
-        if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-        }
 
     - name: Run ${{ matrix.suite }} test suite
       if: matrix.os.name != 'Windows'
       run: composer run-script test:${{ matrix.suite }}
 
-    - name: Run ${{ matrix.suite }} test suite (Windows)
+    - name: Run ${{ matrix.suite }} test suite under ProcDump (Windows)
       if: matrix.os.name == 'Windows'
-      run: composer run-script test:${{ matrix.suite }}
-
-    - name: Remove ProcDump postmortem debugger (Windows)
-      if: always() && matrix.os.name == 'Windows'
       shell: pwsh
-      continue-on-error: true
-      run: '& (Join-Path $env:RUNNER_TEMP ''procdump\procdump.exe'') -u'
+      run: |
+        $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
+        $php = (Get-Command php).Source
+        & (Join-Path $env:RUNNER_TEMP 'procdump\procdump.exe') -accepteula -ma -e 1 -f C0000005 -x $dumpDirectory $php 'vendor/bin/pest' ('tests\' + '${{ matrix.suite }}')
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
 
     - name: Collect PHP debug files (Windows)
       if: failure() && matrix.os.name == 'Windows'
