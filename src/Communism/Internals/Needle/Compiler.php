@@ -62,8 +62,16 @@ final class Compiler
         $functionTable = $compilerGlobals->function_table;
         $originalArena = $compilerGlobals->arena;
         $arenaCheckpoint = $originalArena?->ptr;
-        $originalClassCount = $classTable === null ? 0 : $classTable->nNumUsed;
-        $originalFunctionCount = $functionTable === null ? 0 : $functionTable->nNumUsed;
+        $originalClassKeys = self::keys($classTable);
+        $originalFunctionKeys = self::keys($functionTable);
+        /** @var list<array{key: string, length: int, pointer: object}> $compiledClasses */
+        $compiledClasses = [];
+        /** @var list<array{key: string, length: int, pointer: object}> $compiledFunctions */
+        $compiledFunctions = [];
+        /** @var list<array{key: string, length: int}> $compiledClassKeys */
+        $compiledClassKeys = [];
+        /** @var list<array{key: string, length: int}> $compiledFunctionKeys */
+        $compiledFunctionKeys = [];
         $opArray = null;
 
         try {
@@ -82,13 +90,16 @@ final class Compiler
                 throw new RuntimeException(sprintf('Zend could not compile %s', $filename));
             }
 
-            // Freeze these bounds before decompilation autoloads any helper
-            // classes into Zend's request-local tables.
-            $compiledClassEnd = $classTable === null ? 0 : $classTable->nNumUsed;
-            $compiledFunctionEnd = $functionTable === null ? 0 : $functionTable->nNumUsed;
+            // Capture this before decompilation. Decompiling can autoload
+            // helper classes, and those must not be mistaken for declarations
+            // from the file being inspected.
+            $compiledClasses = self::newEntries($classTable, $originalClassKeys);
+            $compiledFunctions = self::newEntries($functionTable, $originalFunctionKeys);
+            $compiledClassKeys = self::entryKeys($compiledClasses);
+            $compiledFunctionKeys = self::entryKeys($compiledFunctions);
             $body = Decompiler::decompileOpArray($opArray, $filename);
-            $classes = self::newClasses($classTable, $originalClassCount, $compiledClassEnd);
-            $functions = self::newFunctions($functionTable, $originalFunctionCount, $compiledFunctionEnd);
+            $classes = self::newClasses($compiledClasses);
+            $functions = self::newFunctions($compiledFunctions);
 
             return new CompiledFile(
                 $body,
@@ -103,8 +114,12 @@ final class Compiler
                 $ffi->_efree($opArray);
             }
 
-            self::removeEntries($classTable, $originalClassCount, $compiledClassEnd ?? $originalClassCount);
-            self::removeEntries($functionTable, $originalFunctionCount, $compiledFunctionEnd ?? $originalFunctionCount);
+            // Release declaration pointers before mutating the tables holding
+            // their Buckets. Cleanup only needs the copied key data.
+            $compiledClasses = [];
+            $compiledFunctions = [];
+            self::removeEntries($classTable, $compiledClassKeys);
+            self::removeEntries($functionTable, $compiledFunctionKeys);
 
             $ffi->zend_destroy_file_handle(\FFI::addr($handle));
             self::releaseArena($compilerGlobals, $originalArena, $arenaCheckpoint);
@@ -112,25 +127,15 @@ final class Compiler
     }
 
     /**
-     * @phpstan-param \Communism_FFI\HashTable|null $classTable
+     * @param list<array{key: string, length: int, pointer: object}> $entries
      * @return list<CompiledClass>
      */
-    private static function newClasses(?object $classTable, int $originalCount, int $end): array
+    private static function newClasses(array $entries): array
     {
-        if ($classTable === null || $classTable->arData === null) {
-            return [];
-        }
-
         $ffi = Zend::ffi();
         $classes = [];
-        for ($index = $originalCount; $index < $end; $index++) {
-            $bucket = $classTable->arData[$index];
-            $pointer = $bucket->val->value->ptr;
-            if ($pointer === null) {
-                continue;
-            }
-
-            $class = $ffi->cast('zend_class_entry *', $pointer);
+        foreach ($entries as $entry) {
+            $class = $ffi->cast('zend_class_entry *', $entry['pointer']);
             if ($class->name === null) {
                 continue;
             }
@@ -143,25 +148,15 @@ final class Compiler
     }
 
     /**
-     * @phpstan-param \Communism_FFI\HashTable|null $functionTable
+     * @param list<array{key: string, length: int, pointer: object}> $entries
      * @return list<CompiledMethod>
      */
-    private static function newFunctions(?object $functionTable, int $originalCount, int $end): array
+    private static function newFunctions(array $entries): array
     {
-        if ($functionTable === null || $functionTable->arData === null) {
-            return [];
-        }
-
         $ffi = Zend::ffi();
         $functions = [];
-        for ($index = $originalCount; $index < $end; $index++) {
-            $bucket = $functionTable->arData[$index];
-            $pointer = $bucket->val->value->ptr;
-            if ($pointer === null) {
-                continue;
-            }
-
-            $function = $ffi->cast('zend_function *', $pointer);
+        foreach ($entries as $entry) {
+            $function = $ffi->cast('zend_function *', $entry['pointer']);
             if ($function->function_name === null || $function->op_array->opcodes === null) {
                 continue;
             }
@@ -186,14 +181,10 @@ final class Compiler
         }
 
         $ffi = Zend::ffi();
+        $entries = self::entries($table);
         $methods = [];
-        for ($index = 0; $index < $table->nNumUsed; $index++) {
-            $pointer = $table->arData[$index]->val->value->ptr;
-            if ($pointer === null) {
-                continue;
-            }
-
-            $function = $ffi->cast('zend_function *', $pointer);
+        foreach ($entries as $entry) {
+            $function = $ffi->cast('zend_function *', $entry['pointer']);
             if ($function->function_name === null || $function->op_array->opcodes === null) {
                 continue;
             }
@@ -216,40 +207,96 @@ final class Compiler
         return \FFI::string($ffi->cast('char *', $string->val), $string->len);
     }
 
-    /** @phpstan-param \Communism_FFI\HashTable|null $table */
-    private static function removeEntries(?object $table, int $originalCount, int $end): void
+    /**
+     * @param list<array{key: string, length: int}> $entries
+     * @phpstan-param \Communism_FFI\HashTable|null $table
+     */
+    private static function removeEntries(?object $table, array $entries): void
     {
         if ($table === null || $table->arData === null) {
             return;
         }
 
         $ffi = Zend::ffi();
-
-        // Do not keep a Bucket* CData value while mutating the hash table.
-        // Deleting an entry can invalidate the table storage (and its FFI
-        // pointer), leaving later field reads pointed at freed memory.
-        /** @var list<array{key: string, length: int}> $entries */
-        $entries = [];
-        for ($index = $end - 1; $index >= $originalCount; $index--) {
-            $bucket = $table->arData[$index];
-            if ($bucket->val->value->ptr === null) {
-                continue;
-            }
-
-            if ($bucket->key === null) {
-                continue;
-            }
-
-            $key = \FFI::string($ffi->cast('char *', $bucket->key->val), $bucket->key->len);
-            $entries[] = ['key' => $key, 'length' => $bucket->key->len];
-        }
-
-        // Release the last Bucket* CData reference before changing arData.
-        $bucket = null;
-
         foreach ($entries as $entry) {
             $ffi->zend_hash_str_del($table, $entry['key'], $entry['length']);
         }
+    }
+
+    /**
+     * Snapshot all live string-keyed entries before any operation can resize
+     * the hash table. The pointer is to the heap-owned declaration, not to the
+     * Bucket storage, so it remains valid while the table is being inspected.
+     *
+     * @return list<array{key: string, length: int, pointer: object}>
+     * @phpstan-param \Communism_FFI\HashTable|null $table
+     */
+    private static function entries(?object $table): array
+    {
+        if ($table === null || $table->arData === null) {
+            return [];
+        }
+
+        $ffi = Zend::ffi();
+        $entries = [];
+        for ($index = 0; $index < $table->nNumUsed; $index++) {
+            $bucket = $table->arData[$index];
+            $pointer = $bucket->val->value->ptr;
+            if ($pointer === null || $bucket->key === null) {
+                continue;
+            }
+
+            $entries[] = [
+                'key' => \FFI::string($ffi->cast('char *', $bucket->key->val), $bucket->key->len),
+                'length' => $bucket->key->len,
+                'pointer' => $pointer,
+            ];
+        }
+        $bucket = null;
+
+        return $entries;
+    }
+
+    /**
+     * @phpstan-param \Communism_FFI\HashTable|null $table
+     * @return array<string, int>
+     */
+    private static function keys(?object $table): array
+    {
+        $keys = [];
+        foreach (self::entries($table) as $entry) {
+            $keys[$entry['key']] = $entry['length'];
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @param list<array{key: string, length: int, pointer: object}> $entries
+     * @return list<array{key: string, length: int}>
+     */
+    private static function entryKeys(array $entries): array
+    {
+        return array_map(
+            static fn(array $entry): array => [
+                'key' => $entry['key'],
+                'length' => $entry['length'],
+            ],
+            $entries,
+        );
+    }
+
+    /**
+     * @param array<string, int> $originalKeys
+     * @phpstan-param \Communism_FFI\HashTable|null $table
+     * @return list<array{key: string, length: int, pointer: object}>
+     */
+    private static function newEntries(?object $table, array $originalKeys): array
+    {
+        return array_values(array_filter(
+            self::entries($table),
+            static fn(array $entry): bool => !isset($originalKeys[$entry['key']]),
+        ));
     }
 
     /**

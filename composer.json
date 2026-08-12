@@ -32,6 +32,7 @@
     "scripts": {
         "analyse": "phpstan analyze",
         "analyze": "phpstan analyze",
+        "coverage": "php coverage.php",
         "format": "php-cs-fixer fix",
         "format:check": "php-cs-fixer fix --dry-run --diff",
         "paratest": "pest --parallel",
