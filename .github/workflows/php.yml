@@ -165,27 +165,70 @@ jobs:
         $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
         $php = (Get-Command php).Source
         $procdump = Join-Path $env:RUNNER_TEMP 'procdump\procdump.exe'
+        $readyFile = Join-Path $env:RUNNER_TEMP ("communism-pest-ready-$PID")
+        $env:COMMUNISM_PEST_READY_FILE = $readyFile
 
-        # ProcDump's own exit status describes the monitor, not the process it
-        # watched. Start PHP ourselves and attach by PID; matching php.exe by
-        # name is ambiguous because PHPStan launches additional PHP processes.
-        # Pest is deliberately invoked without --parallel as well.
+        # Start PHP paused in a tiny runner, attach ProcDump while the exact PID
+        # is guaranteed to exist, then release Pest. This avoids both the
+        # process-start race and name collisions with PHPStan child processes.
         $process = Start-Process -FilePath $php -ArgumentList @(
-            'vendor/bin/pest',
+            '.github\pest-runner.php',
             ('tests\' + '${{ matrix.suite }}')
-        ) -PassThru -NoNewWindow
+        ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -NoNewWindow
 
-        if (-not $process.HasExited) {
-            & $procdump -accepteula -ma -e 1 -f C0000005 $process.Id $dumpDirectory
-            $procdumpExitCode = $LASTEXITCODE
+        $monitor = $null
+        $phpExitCode = 1
+        try {
+            $deadline = (Get-Date).AddSeconds(10)
+            while (-not (Test-Path -LiteralPath $readyFile)) {
+                if ($process.HasExited) {
+                    throw "Pest runner exited before it became ready (exit code $($process.ExitCode))"
+                }
+                if ((Get-Date) -gt $deadline) {
+                    throw 'Timed out waiting for the Pest runner to become ready'
+                }
+                Start-Sleep -Milliseconds 25
+            }
+
+            $monitor = Start-Process -FilePath $procdump -ArgumentList @(
+                '-accepteula',
+                '-ma',
+                '-e',
+                '1',
+                '-f',
+                'C0000005,C0000409',
+                $process.Id,
+                $dumpDirectory
+            ) -PassThru -NoNewWindow
+
+            Start-Sleep -Milliseconds 500
+            if ($monitor.HasExited) {
+                throw "ProcDump exited before attaching to PHP (exit code $($monitor.ExitCode))"
+            }
+
+            Remove-Item -LiteralPath $readyFile -Force
+            $process.WaitForExit()
+            $phpExitCode = $process.ExitCode
+            $monitor.WaitForExit()
+        } finally {
+            if (Test-Path -LiteralPath $readyFile) {
+                Remove-Item -LiteralPath $readyFile -Force
+            }
+            if (-not $process.HasExited) {
+                Stop-Process -Id $process.Id -Force
+            }
+            if ($null -ne $monitor -and -not $monitor.HasExited) {
+                Stop-Process -Id $monitor.Id -Force
+            }
         }
-
-        $process.WaitForExit()
-        $phpExitCode = $process.ExitCode
 
         if ($phpExitCode -ne 0) {
             exit $phpExitCode
         }
+
+        # ProcDump returns 1 when the monitored process exits without an
+        # exception. That is a successful test run, not a CI failure.
+        exit 0
 
     - name: Collect PHP debug files (Windows)
       if: failure() && matrix.os.name == 'Windows'
