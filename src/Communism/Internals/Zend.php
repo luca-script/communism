@@ -454,6 +454,23 @@ final class Zend
     }
 
     /**
+     * OPcache shares immutable class entries between requests. Their function
+     * tables and method op arrays must never be edited or released by Needle.
+     *
+     * @param class-string $className
+     */
+    private static function assertClassWritable(string $className): void
+    {
+        $class = self::lookupClass($className);
+        if (($class->ce_flags & self::ZEND_ACC_IMMUTABLE) !== 0) {
+            throw new RuntimeException(sprintf(
+                'Cannot mutate OPcache-owned class %s. Disable OPcache before the class is loaded.',
+                $className,
+            ));
+        }
+    }
+
+    /**
      * @param class-string $cls
      * @param non-empty-string $method
      *
@@ -686,6 +703,9 @@ final class Zend
             throw new InvalidArgumentException(sprintf('%s must derive from %s before their methods can be swapped', $classB, $classA));
         }
 
+        self::assertClassWritable($classA);
+        self::assertClassWritable($classB);
+
         $entryA = self::lookupMethodEntry($classA, $methodA);
         $entryB = self::lookupMethodEntry($classB, $methodB);
 
@@ -734,6 +754,8 @@ final class Zend
 
             throw new InvalidArgumentException(sprintf('Mixin target class %s is not declared', $className));
         }
+
+        self::assertClassWritable($className);
 
         $class = new \ReflectionClass($className);
 
@@ -1924,7 +1946,7 @@ void zend_stream_init_filename(zend_file_handle *handle, const char *filename);
 void zend_destroy_file_handle(zend_file_handle *file_handle);
 void destroy_op_array(zend_op_array *op_array);
 typedef union _znode_op {
-    uint32_t constant;
+    int32_t constant;
     uint32_t var;
     uint32_t num;
     uint32_t opline_num;

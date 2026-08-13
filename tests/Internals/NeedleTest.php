@@ -84,6 +84,13 @@ it('keeps CallbackInfo virtual at runtime', function (): void {
         ->toThrow(LogicException::class, 'virtual');
 });
 
+it('preserves negative relative literal offsets from OPcache', function (): void {
+    $node = Zend::ffi()->new('znode_op');
+    $node->constant = -32;
+
+    expect($node->constant)->toBe(-32);
+});
+
 final class NeedleCallTarget
 {
     public static function staticTarget(): string

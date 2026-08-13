@@ -2,6 +2,13 @@
 
 declare(strict_types=1);
 
+// OPcache keeps user classes and their method tables in persistent storage.
+// The internals tests rewrite those tables, so reset it before Composer loads
+// any test classes. This also disables OPcache for the current request.
+if (function_exists('opcache_reset')) {
+    opcache_reset();
+}
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 // Zend is final in production. Tests need to derive from it in

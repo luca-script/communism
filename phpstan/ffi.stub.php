@@ -488,7 +488,8 @@ namespace {
          * @phpstan-return (
          *     $type is 'zval' ? \Communism_FFI\zval :
          *     ($type is 'zend_function' ? \Communism_FFI\zend_function :
-         *     ($type is 'MODULEENTRY32A' ? \Communism_FFI\MODULEENTRY32A : object))
+         *     ($type is 'MODULEENTRY32A' ? \Communism_FFI\MODULEENTRY32A :
+         *     ($type is 'znode_op' ? \Communism_FFI\znode_op : object)))
          * )
          */
         public function new(string $type): object {}

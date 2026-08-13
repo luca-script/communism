@@ -56,6 +56,12 @@ final class Assembler
     public static function write(MethodBody $body, object $opArray): void
     {
         $ffi = Zend::ffi();
+        if (($opArray->fn_flags & Zend::ZEND_ACC_IMMUTABLE) !== 0) {
+            throw new RuntimeException(
+                'Cannot rewrite an OPcache-owned function. Disable OPcache before the target file is loaded.',
+            );
+        }
+
         $oldOpcodes = $opArray->opcodes;
         if ($oldOpcodes === null) {
             throw new RuntimeException('The runtime op array has no opcode storage');
