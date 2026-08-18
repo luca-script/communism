@@ -27,9 +27,10 @@ declare(strict_types=1);
 
 namespace Communism\Reflect;
 
-use Communism\Internals\Zend;
 use InvalidArgumentException;
 use LogicException;
+use Zendful\PropertyHandle;
+use Zendful\Zendful;
 
 use function sprintf;
 
@@ -58,22 +59,19 @@ final readonly class ReflectionProperty
     public function withVisibility(Visibility $visibility, callable $callback): mixed
     {
         $className = $this->ensureDeclaringClassInitialized();
-        $propInfo = Zend::lookupPropertyInfo($className, $this->getName());
+        $propInfo = Zendful::property($className, $this->getName());
 
-        if ($propInfo === null) {
+        if (!$propInfo->exists()) {
+            // @codeCoverageIgnoreStart
             return $callback();
+            // @codeCoverageIgnoreEnd
         }
 
-        $originalFlags = $propInfo->flags;
-        $propInfo->flags = $this->setVisibilityBits($originalFlags, $visibility->value, Zend::ZEND_ACC_PPP_MASK, true);
-        Zend::disableJitForClass($className);
-        Zend::blacklistCurrentCallers();
-
-        try {
-            return $callback();
-        } finally {
-            $propInfo->flags = $originalFlags;
-        }
+        return $propInfo->withVisibility(match ($visibility) {
+            Visibility::Public => 'public',
+            Visibility::Protected => 'protected',
+            Visibility::Private => 'private',
+        }, $callback);
     }
 
     /**
@@ -133,35 +131,27 @@ final readonly class ReflectionProperty
         return $this->reflection->isReadOnly();
     }
 
-    public function setFlag(int $flag, bool $do = true): void
-    {
-        $className = $this->ensureDeclaringClassInitialized();
-        $this->withPropertyInfo($className, $this->getName(), function ($propInfo) use ($flag, $do): void {
-            $propInfo->flags = $this->setBits($propInfo->flags, $flag, $do);
-        });
-    }
-
     public function setPublic(bool $do = true): void
     {
         $className = $this->ensureDeclaringClassInitialized();
-        $this->withPropertyInfo($className, $this->getName(), function ($propInfo) use ($do): void {
-            $propInfo->flags = $this->setVisibilityBits($propInfo->flags, Zend::ZEND_ACC_PUBLIC, Zend::ZEND_ACC_PPP_MASK, $do);
+        $this->withPropertyInfo($className, $this->getName(), function (PropertyHandle $propInfo) use ($do): void {
+            $do ? $propInfo->setVisibility('public') : $propInfo->clearVisibility();
         });
     }
 
     public function setProtected(bool $do = true): void
     {
         $className = $this->ensureDeclaringClassInitialized();
-        $this->withPropertyInfo($className, $this->getName(), function ($propInfo) use ($do): void {
-            $propInfo->flags = $this->setVisibilityBits($propInfo->flags, Zend::ZEND_ACC_PROTECTED, Zend::ZEND_ACC_PPP_MASK, $do);
+        $this->withPropertyInfo($className, $this->getName(), function (PropertyHandle $propInfo) use ($do): void {
+            $do ? $propInfo->setVisibility('protected') : $propInfo->clearVisibility();
         });
     }
 
     public function setPrivate(bool $do = true): void
     {
         $className = $this->ensureDeclaringClassInitialized();
-        $this->withPropertyInfo($className, $this->getName(), function ($propInfo) use ($do): void {
-            $propInfo->flags = $this->setVisibilityBits($propInfo->flags, Zend::ZEND_ACC_PRIVATE, Zend::ZEND_ACC_PPP_MASK, $do);
+        $this->withPropertyInfo($className, $this->getName(), function (PropertyHandle $propInfo) use ($do): void {
+            $do ? $propInfo->setVisibility('private') : $propInfo->clearVisibility();
         });
     }
 
@@ -169,16 +159,8 @@ final readonly class ReflectionProperty
     {
         $className = $this->ensureDeclaringClassInitialized();
         $property = $this->getName();
-        $this->withPropertyInfo($className, $property, function ($propInfo) use ($do): void {
-            if ($do) {
-                $propInfo->flags |= Zend::ZEND_ACC_READONLY;
-                if (($propInfo->flags & (Zend::ZEND_ACC_PUBLIC | Zend::ZEND_ACC_READONLY | Zend::ZEND_ACC_PPP_SET_MASK)) === (Zend::ZEND_ACC_PUBLIC | Zend::ZEND_ACC_READONLY)) {
-                    $propInfo->flags |= Zend::ZEND_ACC_PROTECTED_SET;
-                }
-            } else {
-                $propInfo->flags &= ~Zend::ZEND_ACC_READONLY;
-                $propInfo->flags &= ~Zend::ZEND_ACC_PPP_SET_MASK;
-            }
+        $this->withPropertyInfo($className, $property, function (PropertyHandle $propInfo) use ($do): void {
+            $propInfo->setReadonly($do);
         });
     }
 
@@ -211,12 +193,12 @@ final readonly class ReflectionProperty
             return;
         }
 
-        $this->withPropertyInfo($className, $this->getName(), function ($propInfo) use ($do): void {
-            if ($propInfo->hooks === null) {
+        $this->withPropertyInfo($className, $this->getName(), function (PropertyHandle $propInfo) use ($do): void {
+            if (!$propInfo->hasHooks()) {
                 return;
             }
 
-            $propInfo->flags = $this->setVisibilityBits($propInfo->flags, Zend::ZEND_ACC_PUBLIC_SET, Zend::ZEND_ACC_PPP_SET_MASK, $do);
+            $propInfo->setSetVisibility('public', $do);
         });
     }
 
@@ -227,12 +209,12 @@ final readonly class ReflectionProperty
             return;
         }
 
-        $this->withPropertyInfo($className, $this->getName(), function ($propInfo) use ($do): void {
-            if ($propInfo->hooks === null) {
+        $this->withPropertyInfo($className, $this->getName(), function (PropertyHandle $propInfo) use ($do): void {
+            if (!$propInfo->hasHooks()) {
                 return;
             }
 
-            $propInfo->flags = $this->setVisibilityBits($propInfo->flags, Zend::ZEND_ACC_PROTECTED_SET, Zend::ZEND_ACC_PPP_SET_MASK, $do);
+            $propInfo->setSetVisibility('protected', $do);
         });
     }
 
@@ -243,44 +225,29 @@ final readonly class ReflectionProperty
             return;
         }
 
-        $this->withPropertyInfo($className, $this->getName(), function ($propInfo) use ($do): void {
-            if ($propInfo->hooks === null) {
+        $this->withPropertyInfo($className, $this->getName(), function (PropertyHandle $propInfo) use ($do): void {
+            if (!$propInfo->hasHooks()) {
                 return;
             }
 
-            $propInfo->flags = $this->setVisibilityBits($propInfo->flags, Zend::ZEND_ACC_PRIVATE_SET, Zend::ZEND_ACC_PPP_SET_MASK, $do);
+            $propInfo->setSetVisibility('private', $do);
         });
     }
 
     /**
      * @param class-string $cls
-     * @param callable(\Communism_FFI\zend_property_info): void $cb
+     * @param callable(PropertyHandle): void $cb
      */
     private function withPropertyInfo(string $cls, string $property, callable $cb): void
     {
-        $propInfo = Zend::lookupPropertyInfo($cls, $property);
-        if ($propInfo !== null) {
+        $propInfo = Zendful::property($cls, $property);
+        if ($propInfo->exists()) {
             try {
                 $cb($propInfo);
             } finally {
-                Zend::disableJitForClass($cls);
-                Zend::blacklistCurrentCallers();
+                Zendful::class($cls)->disableJit();
             }
         }
-    }
-
-    private function setBits(int $value, int $flag, bool $do): int
-    {
-        return $do ? ($value | $flag) : ($value & ~$flag);
-    }
-
-    private function setVisibilityBits(int $value, int $visibility, int $mask, bool $do): int
-    {
-        if ($do) {
-            return ($value & ~$mask) | $visibility;
-        }
-
-        return $value & ~$mask;
     }
 
     /**
@@ -289,8 +256,9 @@ final readonly class ReflectionProperty
     private function ensureDeclaringClassInitialized(): string
     {
         $className = $this->reflection->getDeclaringClass()->getName();
-        if (!Zend::classStaticsInitialized($className)) {
-            Zend::initClassStatics($className);
+        $class = Zendful::class($className);
+        if (!$class->staticsInitialized()) {
+            $class->initializeStatics();
         }
 
         return $className;

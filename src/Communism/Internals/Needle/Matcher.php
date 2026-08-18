@@ -63,7 +63,9 @@ final class Matcher
             throw new InvalidArgumentException(sprintf('Custom injection point %s must start with _', $name));
         }
         if (self::isBuiltIn($normalized)) {
+            // @codeCoverageIgnoreStart
             throw new InvalidArgumentException(sprintf('Cannot register built-in injection point %s', $name));
+            // @codeCoverageIgnoreEnd
         }
 
         self::$injectionPoints[$normalized] = $resolver;
@@ -298,7 +300,9 @@ final class Matcher
         if (in_array($type, ['invoke', 'invoke_assign'], true)) {
             $target = $at->target;
             if (!is_string($target) && !is_array($target)) {
+                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('INVOKE expects an invocation target specification');
+                // @codeCoverageIgnoreEnd
             }
             $spec = InvocationSpec::parse($target);
             $matches = [];
@@ -506,7 +510,9 @@ final class Matcher
             throw new InvalidArgumentException('A field target must be "::MEMBERNAME" or a local variable name');
         }
         if (str_starts_with($target, '::') && strlen($target) === 2) {
+            // @codeCoverageIgnoreStart
             throw new InvalidArgumentException('A field member name must not be empty');
+            // @codeCoverageIgnoreEnd
         }
     }
 

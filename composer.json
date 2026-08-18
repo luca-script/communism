@@ -5,10 +5,10 @@
     "license": "0BSD",
     "require": {
         "php": "^8.4",
-        "ext-ffi": "*",
         "ext-mbstring": "*"
     },
     "suggest": {
+        "ext-ffi": "Required by Zendful's fallback backend when no Zendful\\Native implementation is installed.",
         "phpstan/phpstan": "The PHPStan plugin provided in extension.neon provides mixin analysis, which is highly recommended."
     },
     "require-dev": {
@@ -21,7 +21,8 @@
     "autoload": {
         "psr-4": {
             "Communism\\": "src/Communism/",
-            "Communism_PHPStan\\": "src/Communism_PHPStan/"
+            "Communism_PHPStan\\": "src/Communism_PHPStan/",
+            "Zendful\\": "src/Zendful/"
         }
     },
     "autoload-dev": {
@@ -32,21 +33,39 @@
     "scripts": {
         "analyse": "phpstan analyze",
         "analyze": "phpstan analyze",
-        "coverage": "php coverage.php",
+        "coverage": "php coverage.php zendful",
+        "coverage:zendful": "php coverage.php zendful",
+        "coverage:communism": "php coverage.php communism",
         "format": "php-cs-fixer fix",
         "format:check": "php-cs-fixer fix --dry-run --diff",
-        "paratest": "pest --parallel",
-        "paratest:mixin": "pest --parallel tests/Mixin",
-        "paratest:reflect": "pest --parallel tests/Reflect",
-        "paratest:bytecode": "pest --parallel tests/Bytecode",
-        "paratest:internals": "pest --parallel tests/Internals",
-        "paratest:maintenance": "pest --parallel tests/Maintenance",
-        "test": "pest",
-        "test:mixin": "pest tests/Mixin",
-        "test:reflect": "pest tests/Reflect",
-        "test:bytecode": "pest tests/Bytecode",
-        "test:internals": "pest tests/Internals",
-        "test:maintenance": "pest tests/Maintenance"
+        "paratest": [
+            "@paratest:communism",
+            "@paratest:zendful"
+        ],
+        "paratest:communism": "pest --configuration=phpunit-communism.xml --parallel",
+        "paratest:zendful": "pest --configuration=phpunit-zendful.xml --parallel",
+        "paratest:mixin": "pest --configuration=phpunit-communism.xml --parallel --testsuite=Communism.Mixins",
+        "paratest:reflect": "pest --configuration=phpunit-communism.xml --parallel --testsuite=Communism.Reflection",
+        "paratest:bytecode": "pest --configuration=phpunit-communism.xml --parallel --testsuite=Communism.Bytecode",
+        "paratest:internals": "pest --configuration=phpunit-communism.xml --parallel --testsuite=Communism.Internals",
+        "paratest:maintenance": "pest --configuration=phpunit-communism.xml --parallel --testsuite=Communism.Maintenance",
+        "paratest:zendful:api": "pest --configuration=phpunit-zendful.xml --parallel --testsuite=Zendful.PublicApi",
+        "paratest:zendful:internals": "pest --configuration=phpunit-zendful.xml --parallel --testsuite=Zendful.Internals",
+        "paratest:zendful:architecture": "pest --configuration=phpunit-zendful.xml --parallel --testsuite=Zendful.Architecture",
+        "test": [
+            "@test:communism",
+            "@test:zendful"
+        ],
+        "test:communism": "pest --configuration=phpunit-communism.xml",
+        "test:zendful": "pest --configuration=phpunit-zendful.xml",
+        "test:mixin": "pest --configuration=phpunit-communism.xml --testsuite=Communism.Mixins",
+        "test:reflect": "pest --configuration=phpunit-communism.xml --testsuite=Communism.Reflection",
+        "test:bytecode": "pest --configuration=phpunit-communism.xml --testsuite=Communism.Bytecode",
+        "test:internals": "pest --configuration=phpunit-communism.xml --testsuite=Communism.Internals",
+        "test:maintenance": "pest --configuration=phpunit-communism.xml --testsuite=Communism.Maintenance",
+        "test:zendful:api": "pest --configuration=phpunit-zendful.xml --testsuite=Zendful.PublicApi",
+        "test:zendful:internals": "pest --configuration=phpunit-zendful.xml --testsuite=Zendful.Internals",
+        "test:zendful:architecture": "pest --configuration=phpunit-zendful.xml --testsuite=Zendful.Architecture"
     },
     "config": {
         "sort-packages": true,

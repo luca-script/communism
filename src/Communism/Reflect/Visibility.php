@@ -27,14 +27,12 @@ declare(strict_types=1);
 
 namespace Communism\Reflect;
 
-use Communism\Internals\Zend;
-
 /**
  * Enumeration of PHP visibilities
  */
-enum Visibility: int
+enum Visibility: string
 {
-    case Public = 1;
-    case Protected = 2;
-    case Private = 4;
+    case Public = 'public';
+    case Protected = 'protected';
+    case Private = 'private';
 }

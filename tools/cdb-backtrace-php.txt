@@ -1,0 +1,14 @@
+sxe av
+g
+r
+r @$t2 = @rsp
+r @$t0 = @$t2 + 0x100
+.call /v php8!zend_fetch_debug_backtrace(@$t0, 1, 2, 0)
+g
+dq @$t0 L4
+r @$t3 = poi(@$t0)
+.call /v php8!zend_trace_to_string(@$t3, 0)
+g
+r @$t1 = @$callret
+da @$t1+0x18
+q

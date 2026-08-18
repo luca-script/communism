@@ -33,11 +33,11 @@ use function substr;
 use function trim;
 
 /**
- * @implements ConfigurableFixerInterface<array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}, array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}>
+ * @implements ConfigurableFixerInterface<array{copyright_name: string, taglines: array<string, string>, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, rules: array<string, array{consumer: string, tagline?: string}>}, array{copyright_name: string, taglines: array<string, string>, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, rules: array<string, array{consumer: string, tagline?: string}>}>
  */
 final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixerInterface, WhitespacesAwareFixerInterface
 {
-    /** @use ConfigurableFixerTrait<array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}, array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}> */
+    /** @use ConfigurableFixerTrait<array{copyright_name: string, taglines: array<string, string>, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, rules: array<string, array{consumer: string, tagline?: string}>}, array{copyright_name: string, taglines: array<string, string>, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, rules: array<string, array{consumer: string, tagline?: string}>}> */
     use ConfigurableFixerTrait;
 
     private const MIN_HEADER_WIDTH = 20;
@@ -89,12 +89,17 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
                     return $value;
                 })
                 ->getOption(),
-            (new FixerOptionBuilder('tagline', 'Tagline line written in the header.'))
-                ->setAllowedTypes(['string'])
-                ->setNormalizer(static function (Options $options, string $value) use ($fixerName): string {
-                    $value = trim($value);
-                    if ('' === $value) {
-                        throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'Tagline must not be empty.');
+            (new FixerOptionBuilder('taglines', 'Named tagline presets selectable by path rules.'))
+                ->setAllowedTypes(['array'])
+                ->setNormalizer(static function (Options $options, array $value) use ($fixerName): array {
+                    foreach ($value as $name => $tagline) {
+                        if (!is_string($name) || '' === trim($name) || !is_string($tagline) || '' === trim($tagline)) {
+                            throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'taglines must map non-empty names to non-empty strings.');
+                        }
+                    }
+
+                    if ([] === $value) {
+                        throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'taglines must contain at least one preset.');
                     }
 
                     return $value;
@@ -153,18 +158,16 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
                     return $consumers;
                 })
                 ->getOption(),
-            (new FixerOptionBuilder('defaults_regex', 'Ordered path regular expressions mapped to default consumer values.'))
+            (new FixerOptionBuilder('rules', 'Ordered path regular expressions mapped to header defaults.'))
                 ->setAllowedTypes(['array'])
                 ->setNormalizer(static function (Options $options, array $value) use ($fixerName): array {
-                    foreach ($value as $regex => $default) {
-                        $consumer = is_array($default) ? ($default['consumer'] ?? null) : null;
-                        if (!is_string($regex) || !is_array($default) || !is_string($consumer) || false === preg_match($regex, '') || !in_array($consumer, self::CONSUMERS, true)) {
-                            throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'defaults_regex must map valid regular expressions to known consumer values.');
+                    $taglines = $options['taglines'];
+                    foreach ($value as $regex => $rule) {
+                        $consumer = is_array($rule) ? ($rule['consumer'] ?? null) : null;
+                        $tagline = is_array($rule) ? ($rule['tagline'] ?? null) : null;
+                        if (!is_string($regex) || !is_array($rule) || !is_string($consumer) || false === preg_match($regex, '') || !in_array($consumer, self::CONSUMERS, true) || (null !== $tagline && (!is_string($tagline) || !array_key_exists($tagline, is_array($taglines) ? $taglines : [])))) {
+                            throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'rules must map valid regular expressions to known consumer values and tagline presets.');
                         }
-                    }
-
-                    if ([] === $value) {
-                        throw new \PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException($fixerName, 'defaults_regex must contain at least one rule.');
                     }
 
                     return $value;
@@ -209,7 +212,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
             $purpose = sprintf('Source file for %s.', $file->getBasename());
         }
 
-        $normalized = $this->buildHeader($file->getBasename(), $consumer, $purpose, $eol) . $this->extractBody($code);
+        $normalized = $this->buildHeader($file->getBasename(), $consumer, $this->taglineFor($file), $purpose, $eol) . $this->extractBody($code);
         $tokens->setCode($normalized);
     }
 
@@ -225,7 +228,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
         return "\n";
     }
 
-    private function buildHeader(string $fileName, string $consumer, string $purpose, string $eol): string
+    private function buildHeader(string $fileName, string $consumer, string $tagline, string $purpose, string $eol): string
     {
         $year = (new \DateTimeImmutable('now'))->format('Y');
 
@@ -239,7 +242,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
             $this->formatHeaderLine(''),
             ...$this->formatLicenseLines(),
             $this->middleBorder(),
-            $this->formatHeaderLine($this->tagline()),
+            $this->formatHeaderLine($tagline),
             $this->ruleBorder(),
             $this->formatHeaderLine(sprintf('File: %s', $fileName)),
             $this->formatHeaderLine(sprintf('Consumer: %s', $consumer)),
@@ -338,11 +341,6 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
         return $this->configured()['copyright_name'];
     }
 
-    private function tagline(): string
-    {
-        return $this->configured()['tagline'];
-    }
-
     private function headerWidth(): int
     {
         return $this->configured()['header_width'];
@@ -355,15 +353,31 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
 
     private function consumerFor(\SplFileInfo $file): string
     {
+        return $this->ruleFor($file)['consumer'];
+    }
+
+    /** @return array{consumer: string, tagline?: string} */
+    private function ruleFor(\SplFileInfo $file): array
+    {
         $path = str_replace('\\', '/', $file->getPathname());
 
-        foreach ($this->defaultsRegex() as $regex => $default) {
+        foreach ($this->rules() as $regex => $default) {
             if (1 === preg_match($regex, $path)) {
-                return $default['consumer'];
+                return $default;
             }
         }
 
-        throw new \LogicException(sprintf('No defaults_regex rule matched %s.', $file->getPathname()));
+        throw new \LogicException(sprintf('No CommonHeaderFixer rule matched %s.', $file->getPathname()));
+    }
+
+    private function taglineFor(\SplFileInfo $file): string
+    {
+        $default = $this->ruleFor($file);
+        if (isset($default['tagline'])) {
+            return $this->configured()['taglines'][$default['tagline']];
+        }
+
+        return array_values($this->configured()['taglines'])[0];
     }
 
     /** @return list<string> */
@@ -372,10 +386,10 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
         return $this->configured()['allowed_consumers'];
     }
 
-    /** @return array<string, array{consumer: string}> */
-    private function defaultsRegex(): array
+    /** @return array<string, array{consumer: string, tagline?: string}> */
+    private function rules(): array
     {
-        return $this->configured()['defaults_regex'];
+        return $this->configured()['rules'];
     }
 
     private function topBorder(): string
@@ -635,7 +649,7 @@ final class CommonHeaderFixer extends AbstractFixer implements ConfigurableFixer
     }
 
     /**
-     * @return array{copyright_name: string, tagline: string, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, defaults_regex: array<string, array{consumer: string}>}
+     * @return array{copyright_name: string, taglines: array<string, string>, license_name: string, license_text: string, header_width: int, allowed_consumers: list<string>, rules: array<string, array{consumer: string, tagline?: string}>}
      */
     private function configured(): array
     {

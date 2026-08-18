@@ -28,6 +28,9 @@ declare(strict_types=1);
 namespace Communism\Reflect;
 
 use Communism\Internals\Zend;
+use Zendful\ClassHandle;
+use Zendful\PropertyHandle;
+use Zendful\Zendful;
 
 use function in_array;
 
@@ -49,13 +52,6 @@ final readonly class ReflectionClass
     public function __construct(object|string $class)
     {
         $this->reflection = new \ReflectionClass($class);
-    }
-
-    public function setFlag(int $flag, bool $do = true): void
-    {
-        $this->withClassEntry($this->getName(), function ($clazz) use ($flag, $do): void {
-            $clazz->ce_flags = $this->setBits($clazz->ce_flags, $flag, $do);
-        });
     }
 
     /**
@@ -98,49 +94,49 @@ final readonly class ReflectionClass
 
     public function setFinal(bool $do = true): void
     {
-        $this->setFlag(Zend::ZEND_ACC_FINAL, $do);
+        Zendful::class($this->getName())->setFinal($do);
     }
 
     public function setReadonly(bool $do = true): void
     {
-        $this->setFlag(Zend::ZEND_ACC_READONLY_CLASS, $do);
+        Zendful::class($this->getName())->setReadonly($do);
     }
 
     public function setAbstract(bool $do = true): void
     {
-        $this->setFlag(Zend::ZEND_ACC_ABSTRACT, $do);
+        Zendful::class($this->getName())->setAbstract($do);
     }
 
     public function setTrait(bool $do = true): void
     {
         if ($do) {
-            $this->setClassKind($this->getName(), Zend::ZEND_ACC_TRAIT);
+            Zendful::class($this->getName())->setKind('trait');
         } else {
-            $this->setClassKind($this->getName(), 0);
+            Zendful::class($this->getName())->setKind(null);
         }
     }
 
     public function setEnum(bool $do = true): void
     {
         if ($do) {
-            $this->setClassKind($this->getName(), Zend::ZEND_ACC_ENUM);
+            Zendful::class($this->getName())->setKind('enum');
         } else {
-            $this->setClassKind($this->getName(), 0);
+            Zendful::class($this->getName())->setKind(null);
         }
     }
 
     public function setInterface(bool $do = true): void
     {
         if ($do) {
-            $this->setClassKind($this->getName(), Zend::ZEND_ACC_INTERFACE);
+            Zendful::class($this->getName())->setKind('interface');
         } else {
-            $this->setClassKind($this->getName(), 0);
+            Zendful::class($this->getName())->setKind(null);
         }
     }
 
     public function setAnonymous(bool $do = true): void
     {
-        $this->setFlag(Zend::ZEND_ACC_ANON_CLASS, $do);
+        Zendful::class($this->getName())->setAnonymous($do);
     }
 
     /**
@@ -154,18 +150,16 @@ final readonly class ReflectionClass
     public function withExtensible(callable $callback): mixed
     {
         $className = $this->getName();
-        $clazz = Zend::lookupClass($className);
-        $originalFlags = $clazz->ce_flags;
-        $wasFinal = ($originalFlags & Zend::ZEND_ACC_FINAL) !== 0;
-        $clazz->ce_flags = $originalFlags & ~Zend::ZEND_ACC_FINAL;
-        Zend::disableJitForClass($className);
-        Zend::blacklistCurrentCallers();
+        $clazz = Zendful::class($className);
+        $wasFinal = $this->reflection->isFinal();
+        $clazz->setFinal(false);
+        Zendful::class($className)->disableJit();
 
         try {
             return $callback();
         } finally {
             if ($wasFinal) {
-                $clazz->ce_flags |= Zend::ZEND_ACC_FINAL;
+                $clazz->setFinal(true);
             }
         }
     }
@@ -187,7 +181,9 @@ final readonly class ReflectionClass
                 }
 
                 if ($classRef->isTrait()) {
+                    // @codeCoverageIgnoreStart
                     continue;
+                    // @codeCoverageIgnoreEnd
                 }
 
                 if (!in_array($traitName, $classRef->getTraitNames(), true)) {
@@ -263,62 +259,19 @@ final readonly class ReflectionClass
     }
 
     /**
-     * @param class-string $cls
-     * @param callable(\Communism_FFI\zend_class_entry): void $cb
-     * @param-immediately-invoked-callable $cb
-     */
-    private function withClassEntry(string $cls, callable $cb): void
-    {
-        try {
-            $cb(Zend::lookupClass($cls));
-        } finally {
-            Zend::disableJitForClass($cls);
-            Zend::blacklistCurrentCallers();
-        }
-    }
-
-    private function setBits(int $value, int $flag, bool $do): int
-    {
-        return $do ? ($value | $flag) : ($value & ~$flag);
-    }
-
-    /**
      * @param class-string     $cls
      * @param non-empty-string $property
      */
     private function propertyReadonlyOnClass(string $cls, string $property, bool $do): void
     {
-        $propInfo = Zend::lookupPropertyInfo($cls, $property);
-        if ($propInfo === null) {
+        if (!property_exists($cls, $property)) {
             return;
         }
 
-        if ($do) {
-            $propInfo->flags |= Zend::ZEND_ACC_READONLY;
-            if (($propInfo->flags & (Zend::ZEND_ACC_PUBLIC | Zend::ZEND_ACC_READONLY | Zend::ZEND_ACC_PPP_SET_MASK)) === (Zend::ZEND_ACC_PUBLIC | Zend::ZEND_ACC_READONLY)) {
-                $propInfo->flags |= Zend::ZEND_ACC_PROTECTED_SET;
-            }
-        } else {
-            $propInfo->flags &= ~Zend::ZEND_ACC_READONLY;
-            $propInfo->flags &= ~Zend::ZEND_ACC_PPP_SET_MASK;
-        }
+        $propInfo = Zendful::property($cls, $property);
+        $propInfo->setReadonly($do);
 
-        Zend::disableJitForClass($cls);
-        Zend::blacklistCurrentCallers();
+        Zendful::class($cls)->disableJit();
     }
 
-    /**
-     * @param class-string $cls
-     */
-    private function setClassKind(string $cls, int $kind): void
-    {
-        $this->withClassEntry($cls, function ($clazz) use ($kind): void {
-            $clazz->ce_flags = ($clazz->ce_flags & ~(
-                Zend::ZEND_ACC_FINAL
-                | Zend::ZEND_ACC_INTERFACE
-                | Zend::ZEND_ACC_ENUM
-                | Zend::ZEND_ACC_TRAIT
-            )) | $kind;
-        });
-    }
 }

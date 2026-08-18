@@ -6,7 +6,7 @@ use Communism\Ext\CommonHeaderFixer;
 use PhpCsFixer\Tokenizer\Tokens;
 
 /**
- * @param array{copyright_name?: string, tagline?: string, license_name?: string, license_text?: string, header_width?: int, allowed_consumers?: list<string>, defaults_regex?: array<string, array{consumer: string}>} $overrides
+ * @param array{copyright_name?: string, taglines?: array<string, string>, license_name?: string, license_text?: string, header_width?: int, allowed_consumers?: list<string>, rules?: array<string, array{consumer: string, tagline?: string}>} $overrides
  */
 function configuredCommonHeaderFixer(array $overrides = []): CommonHeaderFixer
 {
@@ -18,12 +18,12 @@ function configuredCommonHeaderFixer(array $overrides = []): CommonHeaderFixer
 
     $configuration = [
         'copyright_name' => 'Luca Mollema',
-        'tagline' => ':: Communism :: "In comrade PHP, all are public" ::',
+        'taglines' => ['Communism' => ':: Communism :: "In comrade PHP, all are public" ::'],
         'license_name' => '0BSD',
         'license_text' => $licenseText,
         'header_width' => 80,
         'allowed_consumers' => ['Users', 'Internal'],
-        'defaults_regex' => [
+        'rules' => [
             '~src/Communism/Internals/~' => ['consumer' => 'Internal'],
             '~src/Communism(?:_PHPStan)?/~' => ['consumer' => 'Users'],
         ],
@@ -33,8 +33,8 @@ function configuredCommonHeaderFixer(array $overrides = []): CommonHeaderFixer
         $configuration['copyright_name'] = $overrides['copyright_name'];
     }
 
-    if (array_key_exists('tagline', $overrides)) {
-        $configuration['tagline'] = $overrides['tagline'];
+    if (array_key_exists('taglines', $overrides)) {
+        $configuration['taglines'] = $overrides['taglines'];
     }
 
     if (array_key_exists('license_name', $overrides)) {
@@ -53,8 +53,8 @@ function configuredCommonHeaderFixer(array $overrides = []): CommonHeaderFixer
         $configuration['allowed_consumers'] = $overrides['allowed_consumers'];
     }
 
-    if (array_key_exists('defaults_regex', $overrides)) {
-        $configuration['defaults_regex'] = $overrides['defaults_regex'];
+    if (array_key_exists('rules', $overrides)) {
+        $configuration['rules'] = $overrides['rules'];
     }
 
     $fixer->configure($configuration);
@@ -111,7 +111,7 @@ it('inserts the common header for Communism source files', function (): void {
     expect($code)->toContain('Purpose: Source file for Example.php.');
 });
 
-it('assigns the Internal consumer from the configured defaults regex', function (): void {
+it('assigns the Internal consumer from the configured path rule', function (): void {
     $fixer = configuredCommonHeaderFixer();
     $file = new SplFileInfo(__DIR__ . '/../../src/Communism/Internals/Executor.php');
     $tokens = Tokens::fromCode(<<<'PHP'
@@ -128,6 +128,36 @@ it('assigns the Internal consumer from the configured defaults regex', function 
 
     $fixer->fix($file, $tokens);
 
+    expect($tokens->generateCode())->toContain('Consumer: Internal');
+});
+
+it('selects a tagline preset from the first matching path rule', function (): void {
+    $fixer = configuredCommonHeaderFixer([
+        'taglines' => [
+            'Communism' => ':: Communism :: "In comrade PHP, all are public" ::',
+            'Zendful' => ':: Zendful :: "When PHP doesn\'t provide, we do!" ::',
+        ],
+        'rules' => [
+            '~src/Zendful/~' => ['consumer' => 'Internal', 'tagline' => 'Zendful'],
+            '~src/Communism/~' => ['consumer' => 'Users', 'tagline' => 'Communism'],
+        ],
+    ]);
+    $file = new SplFileInfo(__DIR__ . '/../../src/Zendful/Example.php');
+    $tokens = Tokens::fromCode(<<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Zendful;
+
+        final class Example
+        {
+        }
+        PHP);
+
+    $fixer->fix($file, $tokens);
+
+    expect($tokens->generateCode())->toContain(':: Zendful :: "When PHP doesn\'t provide, we do!" ::');
     expect($tokens->generateCode())->toContain('Consumer: Internal');
 });
 
@@ -161,7 +191,7 @@ it('rejects a Consumer value outside the configured allowlist', function (): voi
 it('honors custom header configuration', function (): void {
     $fixer = configuredCommonHeaderFixer([
         'copyright_name' => 'Example Corp',
-        'tagline' => ':: Example :: custom tagline ::',
+        'taglines' => ['Example' => ':: Example :: custom tagline ::'],
         'license_name' => 'Example License',
         'license_text' => "Example license text.\nIt may span multiple lines.",
         'header_width' => 72,

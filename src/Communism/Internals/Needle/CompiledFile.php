@@ -30,9 +30,8 @@ namespace Communism\Internals\Needle;
 /**
  * The useful, detached part of a file compiled without executing it.
  *
- * All objects in this value are snapshots. The FFI pointers returned by Zend
- * are read before their compiler-owned storage is destroyed and never escape
- * this class.
+ * All objects in this value are snapshots. Runtime pointers are read before
+ * their compiler-owned storage is destroyed and never escape this class.
  */
 final readonly class CompiledFile
 {

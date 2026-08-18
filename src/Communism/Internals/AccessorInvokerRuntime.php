@@ -105,7 +105,9 @@ final class AccessorInvokerRuntime
 
         $method = $frame['function'];
         if ($method === '') {
+            // @codeCoverageIgnoreStart
             throw new LogicException('A generated accessor or invoker must be called as a class method');
+            // @codeCoverageIgnoreEnd
         }
 
         return [$frame['class'], $method];

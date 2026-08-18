@@ -27,6 +27,8 @@ declare(strict_types=1);
 
 namespace Communism\Internals;
 
+use Zendful\Zendful;
+
 /**
  * Reflection-style wrapper around executor-level state.
  */
@@ -41,6 +43,6 @@ final class Executor
      */
     public static function swapFunctions(string $functionA, string $functionB): void
     {
-        Zend::swapFunctions($functionA, $functionB);
+        Zendful::function($functionA)->swapWith(Zendful::function($functionB));
     }
 }

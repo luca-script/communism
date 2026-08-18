@@ -6,3 +6,5 @@
 /php-src
 /tmp
 /tmp/**
+/.tmp
+/.tmp/**

@@ -1,0 +1,9 @@
+Zendful
+estring
+strpprintf
+fastcall
+vectorcall
+MODULEENTRY32A
+Toolhelp
+Luca
+Mollema

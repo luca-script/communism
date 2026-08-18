@@ -32,13 +32,14 @@ use Communism\Mixin\CallbackInfoReturnable;
 use Communism\Mixin\Coerce;
 use Communism\Mixin\Inject;
 use Communism\Mixin\LocalCapture;
-use Communism\Internals\Zend;
 use InvalidArgumentException;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
+use Zendful\Zendful;
+use Zendful\OpArrayHandle;
 
 use function in_array;
 use function is_array;
@@ -288,9 +289,8 @@ final class Injector
      *
      * @param list<Inject> $injections
      * @param callable(MethodBody, list<ResolvedInjection>): mixed $rewrite
-     * @phpstan-param \Communism_FFI\zend_op_array $opArray
      */
-    public static function rewrite(MethodBody $body, object $opArray, array $injections, callable $rewrite): void
+    public static function rewrite(MethodBody $body, OpArrayHandle $opArray, array $injections, callable $rewrite): void
     {
         $resolved = self::resolve($body, $injections);
         $rewritten = $rewrite($body, $resolved);
@@ -529,7 +529,9 @@ final class Injector
                 ? []
                 : self::lowerArgsRange($target, $source, $index + 1, $callEnd - 1, $argsCv, $arguments, $replacements);
             if ($instruction->operand2->kind !== Operand::CONSTANT || !is_string($instruction->operand2->value)) {
+                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('A virtual Args method name must be a string');
+                // @codeCoverageIgnoreEnd
             }
             $method = strtolower($instruction->operand2->value);
             $do = $source[$callEnd];
@@ -703,17 +705,17 @@ final class Injector
     private static function sendOpcode(Instruction $original, Operand $operand): array
     {
         if ($operand->kind === Operand::CONSTANT) {
-            return [Zend::opcodeId('SEND_VAL'), 'SEND_VAL'];
+            return [Zendful::opcodeId('SEND_VAL'), 'SEND_VAL'];
         }
 
         if ($operand->kind === Operand::TEMPORARY) {
-            return [Zend::opcodeId('SEND_VAL_EX'), 'SEND_VAL_EX'];
+            return [Zendful::opcodeId('SEND_VAL_EX'), 'SEND_VAL_EX'];
         }
 
         // SEND_VAR_EX accepts both CV and VAR operands. SEND_VAR is still
         // emitted by some compilers, but it is not a stable lookup name for
         // zend_get_opcode_id() on every supported PHP development build.
-        return [Zend::opcodeId('SEND_VAR_EX'), 'SEND_VAR_EX'];
+        return [Zendful::opcodeId('SEND_VAR_EX'), 'SEND_VAR_EX'];
     }
 
     /**
@@ -1100,7 +1102,9 @@ final class Injector
                 : self::lowerCallbackRange($target, $source, $index + 1, $callEnd - 1, $context, $preserve);
             $methodName = $instruction->operand2->value;
             if (!is_string($methodName)) {
+                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('A virtual CallbackInfo method name must be a string');
+                // @codeCoverageIgnoreEnd
             }
             $method = strtolower($methodName);
             $do = $source[$callEnd];
@@ -1141,7 +1145,7 @@ final class Injector
                 $lowered = [...$lowered, ...$inner];
                 if (!$do->result->isUnused()) {
                     $replacement = new Instruction(
-                        Zend::opcodeId('QM_ASSIGN'),
+                        Zendful::opcodeId('QM_ASSIGN'),
                         'QM_ASSIGN',
                         $do->result,
                         $value,
@@ -1265,7 +1269,7 @@ final class Injector
     private static function callbackReturn(MethodBody $target, array $context, int $line, int $originalIndex): Instruction
     {
         return new Instruction(
-            Zend::opcodeId('RETURN'),
+            Zendful::opcodeId('RETURN'),
             'RETURN',
             Operand::unused(),
             $context['returnOperand'],
@@ -1280,7 +1284,7 @@ final class Injector
     private static function callbackReturnWithValue(MethodBody $target, Operand $value, int $line, int $originalIndex): Instruction
     {
         return new Instruction(
-            Zend::opcodeId('RETURN'),
+            Zendful::opcodeId('RETURN'),
             'RETURN',
             Operand::unused(),
             $value,
@@ -1444,7 +1448,7 @@ final class Injector
             $last = $body->instruction($match->end - 1);
 
             return [...$handlerInstructions, new Instruction(
-                Zend::opcodeId('QM_ASSIGN'),
+                Zendful::opcodeId('QM_ASSIGN'),
                 'QM_ASSIGN',
                 $last->result,
                 $handlerReturn->operand1,
@@ -1462,7 +1466,7 @@ final class Injector
             $target = $body->instruction($match->start);
 
             return [...$handlerInstructions, new Instruction(
-                Zend::opcodeId('QM_ASSIGN'),
+                Zendful::opcodeId('QM_ASSIGN'),
                 'QM_ASSIGN',
                 $target->result,
                 $handlerReturn->operand1,
@@ -1486,7 +1490,7 @@ final class Injector
             }
 
             return [...$handlerInstructions, new Instruction(
-                Zend::opcodeId('QM_ASSIGN'),
+                Zendful::opcodeId('QM_ASSIGN'),
                 'QM_ASSIGN',
                 $target->result,
                 $handlerReturn->operand1,
@@ -1631,7 +1635,9 @@ final class Injector
                 $map = [];
                 foreach ($sourceReceives as $index => $receive) {
                     if ($receive->result->kind !== Operand::CV || !is_int($receive->result->value)) {
+                        // @codeCoverageIgnoreStart
                         throw new InvalidArgumentException('An array redirect handler receive has no CV operand');
+                        // @codeCoverageIgnoreEnd
                     }
                     $map[$receive->result->value] = $operands[$index];
                 }

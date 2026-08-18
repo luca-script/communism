@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+    bootstrap="tests/bootstrap-communism.php"
+    cacheDirectory=".phpunit-cache-communism"
+    colors="true"
+    failOnRisky="true"
+    failOnWarning="true"
+    executionOrder="random"
+>
+    <testsuites>
+        <testsuite name="Communism.Mixins">
+            <directory suffix="Test.php">tests/Communism/Mixins</directory>
+        </testsuite>
+        <testsuite name="Communism.Reflection">
+            <directory suffix="Test.php">tests/Communism/Reflection</directory>
+        </testsuite>
+        <testsuite name="Communism.Bytecode">
+            <directory suffix="Test.php">tests/Communism/Bytecode</directory>
+        </testsuite>
+        <testsuite name="Communism.Maintenance">
+            <directory suffix="Test.php">tests/Maintenance</directory>
+        </testsuite>
+        <testsuite name="Communism.Architecture">
+            <directory suffix="Test.php">tests/Architecture/Communism</directory>
+        </testsuite>
+        <testsuite name="Communism.Internals">
+            <directory suffix="Test.php">tests/Communism/Internals</directory>
+        </testsuite>
+        <testsuite name="Communism.Runtime">
+            <directory suffix="Test.php">tests/Communism/Runtime</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

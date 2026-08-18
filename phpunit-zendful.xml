@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+    bootstrap="tests/bootstrap-zendful.php"
+    cacheDirectory=".phpunit-cache-zendful"
+    colors="true"
+    failOnRisky="true"
+    failOnWarning="true"
+    executionOrder="random"
+>
+    <testsuites>
+        <testsuite name="Zendful.PublicApi">
+            <directory suffix="Test.php">tests/Zendful/Public</directory>
+        </testsuite>
+        <testsuite name="Zendful.Internals">
+            <directory suffix="Test.php">tests/Zendful/Internals</directory>
+        </testsuite>
+        <testsuite name="Zendful.Architecture">
+            <directory suffix="Test.php">tests/Architecture/Zendful</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

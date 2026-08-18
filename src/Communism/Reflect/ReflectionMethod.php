@@ -27,7 +27,8 @@ declare(strict_types=1);
 
 namespace Communism\Reflect;
 
-use Communism\Internals\Zend;
+use Zendful\MethodHandle;
+use Zendful\Zendful;
 
 /**
  * Reflection-style wrapper around a method.
@@ -51,22 +52,19 @@ final readonly class ReflectionMethod
      */
     public function withVisibility(Visibility $visibility, callable $callback): mixed
     {
-        $methodInfo = Zend::lookupMethod($this->reflection->getDeclaringClass()->getName(), $this->getName());
+        $methodInfo = Zendful::method($this->reflection->getDeclaringClass()->getName(), $this->getName());
 
-        if ($methodInfo === null) {
+        if (!$methodInfo->exists()) {
+            // @codeCoverageIgnoreStart
             return $callback();
+            // @codeCoverageIgnoreEnd
         }
 
-        $originalFlags = $methodInfo->fn_flags;
-        $methodInfo->fn_flags = $this->setVisibilityBits($originalFlags, $visibility->value, Zend::ZEND_ACC_PPP_MASK, true);
-        Zend::disableJitForMethod($this->reflection->getDeclaringClass()->getName(), $this->getName());
-        Zend::blacklistCurrentCallers();
-
-        try {
-            return $callback();
-        } finally {
-            $methodInfo->fn_flags = $originalFlags;
-        }
+        return $methodInfo->withVisibility(match ($visibility) {
+            Visibility::Public => 'public',
+            Visibility::Protected => 'protected',
+            Visibility::Private => 'private',
+        }, $callback);
     }
 
     /**
@@ -135,76 +133,54 @@ final readonly class ReflectionMethod
      */
     public function swap(ReflectionMethod $replacement): void
     {
-        Zend::swapMethods(
-            $this->reflection->getDeclaringClass()->getName(),
-            $this->getName(),
-            $replacement->reflection->getDeclaringClass()->getName(),
-            $replacement->getName(),
+        Zendful::method($this->reflection->getDeclaringClass()->getName(), $this->getName())->swapWith(
+            Zendful::method($replacement->reflection->getDeclaringClass()->getName(), $replacement->getName()),
         );
-    }
-
-    public function setFlag(int $flag, bool $do = true): void
-    {
-        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function ($func) use ($flag, $do): void {
-            $func->fn_flags = $this->setBits($func->fn_flags, $flag, $do);
-        });
     }
 
     public function setPublic(bool $do = true): void
     {
-        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function ($func) use ($do): void {
-            $func->fn_flags = $this->setVisibilityBits($func->fn_flags, Zend::ZEND_ACC_PUBLIC, Zend::ZEND_ACC_PPP_MASK, $do);
+        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function (MethodHandle $func) use ($do): void {
+            $do ? $func->setVisibility('public') : $func->clearVisibility();
         });
     }
 
     public function setProtected(bool $do = true): void
     {
-        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function ($func) use ($do): void {
-            $func->fn_flags = $this->setVisibilityBits($func->fn_flags, Zend::ZEND_ACC_PROTECTED, Zend::ZEND_ACC_PPP_MASK, $do);
+        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function (MethodHandle $func) use ($do): void {
+            $do ? $func->setVisibility('protected') : $func->clearVisibility();
         });
     }
 
     public function setPrivate(bool $do = true): void
     {
-        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function ($func) use ($do): void {
-            $func->fn_flags = $this->setVisibilityBits($func->fn_flags, Zend::ZEND_ACC_PRIVATE, Zend::ZEND_ACC_PPP_MASK, $do);
+        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function (MethodHandle $func) use ($do): void {
+            $do ? $func->setVisibility('private') : $func->clearVisibility();
         });
     }
 
     public function setStatic(bool $do = true): void
     {
-        $this->setFlag(Zend::ZEND_ACC_STATIC, $do);
+        $this->withMethodEntry($this->reflection->getDeclaringClass()->getName(), $this->getName(), function (MethodHandle $func) use ($do): void {
+            $func->setStatic($do);
+        });
     }
 
     /**
      * @param class-string $cls
      * @param non-empty-string $method
-     * @param callable(\Communism_FFI\zend_function): void $cb
+     * @param callable(MethodHandle): void $cb
      */
     private function withMethodEntry(string $cls, string $method, callable $cb): void
     {
-        $func = Zend::lookupMethod($cls, $method);
-        if ($func !== null) {
+        $func = Zendful::method($cls, $method);
+        if ($func->exists()) {
             try {
                 $cb($func);
             } finally {
-                Zend::disableJitForMethod($cls, $method);
-                Zend::blacklistCurrentCallers();
+                Zendful::method($cls, $method)->disableJit();
             }
         }
     }
 
-    private function setBits(int $value, int $flag, bool $do): int
-    {
-        return $do ? ($value | $flag) : ($value & ~$flag);
-    }
-
-    private function setVisibilityBits(int $value, int $visibility, int $mask, bool $do): int
-    {
-        if ($do) {
-            return ($value & ~$mask) | $visibility;
-        }
-
-        return $value & ~$mask;
-    }
 }

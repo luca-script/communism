@@ -2,6 +2,24 @@
 
 declare(strict_types=1);
 
+$scope = $argv[1] ?? 'zendful';
+if (!in_array($scope, ['zendful', 'communism'], true)) {
+    fwrite(STDERR, "Coverage scope must be 'zendful' or 'communism'.\n");
+    exit(1);
+}
+
+$scopeDirectories = [
+    'zendful' => 'Zendful',
+    'communism' => 'Communism',
+];
+$coverageDirectory = realpath(
+    __DIR__ . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . $scopeDirectories[$scope],
+);
+if ($coverageDirectory === false) {
+    fwrite(STDERR, sprintf("Coverage directory for %s could not be resolved.\n", $scope));
+    exit(1);
+}
+
 $configuredExtensionDirectory = (string) ini_get('extension_dir');
 $extensionDirectory = realpath($configuredExtensionDirectory);
 if (!preg_match('/^(?:[A-Za-z]:[\\\\\/]|[\\\\\/])/', $configuredExtensionDirectory)) {
@@ -65,15 +83,16 @@ $command = [
     '-d',
     'pcov.enabled=1',
     '-d',
-    'pcov.directory=' . __DIR__ . DIRECTORY_SEPARATOR . 'src',
+    'pcov.directory=' . $coverageDirectory,
     '-d',
     // PCOV and the CLI executor are incompatible with OPcache's CLI hooks.
     // The Zend extension remains loaded, so opcache_jit_blacklist() exists.
     'opcache.enable_cli=0',
     __DIR__ . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'pest',
+    '--configuration',
+    __DIR__ . DIRECTORY_SEPARATOR . 'phpunit-' . $scope . '.xml',
     '--coverage',
-    '--coverage-filter=src/Communism',
-    '--only-summary-for-coverage-text',
+    '--coverage-filter=' . $coverageDirectory,
 ];
 
 $process = proc_open($command, [STDIN, STDOUT, STDERR], $pipes, __DIR__);

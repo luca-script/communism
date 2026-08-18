@@ -1,9 +1,12 @@
 # Needle compile-only inspection
 
-Communism\Internals\Needle\Compiler::compileFile() is the low-level path used when
-Needle needs Zend's view of a PHP file without running that file.
+`Communism\Internals\Needle\Compiler::compileFile()` is the Communism-facing
+path used when Needle needs Zend's view of a PHP file without running that
+file. The unsafe compiler lifecycle belongs to `Zendful\Internals\Compiler`;
+Needle receives detached `Zendful` value handles and converts them into its
+own internal snapshots.
 
-It calls Zend's exported compile_file() entry point with
+The fallback Zendful backend calls Zend's exported `compile_file()` entry point with
 ZEND_COMPILE_WITHOUT_EXECUTION. The result is copied immediately into
 Needle values:
 
@@ -26,11 +29,11 @@ The returned objects do not contain FFI pointers. Their opcode operands,
 literal values, variable names, source locations, and method bodies remain
 usable after the Zend compiler storage has been released.
 
-The compiler table is request-local. Needle records its original bounds,
-reads only entries created by this compilation, destroys those entries
-through Zend's hash-table destructors, and restores the compiler arena to a
-checkpoint taken before compilation. This is important because constructing
-the snapshot can autoload Needle's own PHP classes into the same Zend tables.
+The compiler table is request-local. Zendful records its original bounds,
+reads only entries created by this compilation, destroys those entries through
+Zend's hash-table destructors, and restores the compiler arena to a checkpoint
+taken before compilation. This is important because constructing the snapshot
+can autoload Needle's own PHP classes into the same Zend tables.
 
 This is intentionally an incomplete bytecode view. It does not execute
 include, require, autoloaders, or top-level expressions, and it does not
@@ -76,4 +79,5 @@ executing the target file.
 
 Needle is an internal bytecode tool. Normal consumers should continue to use
 the Mixin attributes and leave this namespace to tooling and transformation
-implementations.
+implementations. Communism does not require FFI when a native Zendful backend
+is installed; the fallback backend requires the PHP FFI extension.

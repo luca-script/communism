@@ -34,7 +34,7 @@ return (new PhpCsFixer\Config())
                 'Communism/common_header' => static function (SplFileInfo $file): bool {
                     $path = str_replace('\\', '/', $file->getPathname());
 
-                    return str_contains($path, 'src/Communism/') || str_contains($path, 'src/Communism_PHPStan/');
+                    return str_contains($path, 'src/Zendful/') || str_contains($path, 'src/Communism/') || str_contains($path, 'src/Communism_PHPStan/');
                 },
             ];
         }
@@ -44,14 +44,18 @@ return (new PhpCsFixer\Config())
         'declare_strict_types' => true,
         'Communism/common_header' => [
             'copyright_name' => 'Luca Mollema',
-            'tagline' => ':: Communism :: "In comrade PHP, all are public" ::',
+            'taglines' => [
+                'Communism' => ':: Communism :: "In comrade PHP, all are public" ::',
+                'Zendful' => ':: Zendful :: "When PHP doesn\'t provide it, we do!" ::'
+            ],
             'license_name' => '0BSD',
             'license_text' => file_get_contents(__DIR__ . '/LICENSE'),
             'header_width' => 80,
             'allowed_consumers' => ['Users', 'Internal'],
-            'defaults_regex' => [
-                '~src/Communism/Internals/~' => ['consumer' => 'Internal'],
-                '~src/Communism(?:_PHPStan)?/~' => ['consumer' => 'Users'],
+            'rules' => [
+                '~src/Communism/Internals/~' => ['consumer' => 'Internal', 'tagline' => 'Communism'],
+                '~src/Communism(?:_PHPStan)?/~' => ['consumer' => 'Users', 'tagline' => 'Communism'],
+                '~src/Zendful/~' => ['consumer' => 'Internal', 'tagline' => 'Zendful'],
             ],
         ],
     ])
