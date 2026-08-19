@@ -194,7 +194,6 @@ jobs:
                 '-accepteula',
                 '-ma',
                 '-e',
-                '1',
                 '-f',
                 'C0000005,C0000409',
                 $process.Id,
@@ -230,8 +229,17 @@ jobs:
         # exception. That is a successful test run, not a CI failure.
         exit 0
 
-    - name: Collect PHP debug files (Windows)
+    - name: Detect PHP crash dump (Windows)
       if: failure() && matrix.os.name == 'Windows'
+      id: php-crash
+      shell: pwsh
+      run: |
+        $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
+        $dump = Get-ChildItem -LiteralPath $dumpDirectory -Filter '*.dmp' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+        "found=$([bool]$dump)" | Add-Content -Path $env:GITHUB_OUTPUT
+
+    - name: Collect PHP debug files (Windows)
+      if: failure() && matrix.os.name == 'Windows' && steps.php-crash.outputs.found == 'true'
       shell: pwsh
       run: |
         $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
@@ -246,7 +254,7 @@ jobs:
             Copy-Item -Destination $symbols -Force
 
     - name: Upload PHP crash dumps (Windows)
-      if: failure() && matrix.os.name == 'Windows'
+      if: failure() && matrix.os.name == 'Windows' && steps.php-crash.outputs.found == 'true'
       uses: actions/upload-artifact@v7
       with:
         name: php-crash-dumps-${{ matrix.php.name }}-${{ matrix.suite }}
