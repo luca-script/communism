@@ -447,6 +447,7 @@ class Natives
 
     // END OF EXTERNAL COPYRIGHT
     private static ?FFI $def = null;
+    private static ?string $library = null;
 
     /**
      * @return FFI
@@ -679,7 +680,7 @@ EOF . (self::supportsPhp86() ? "        uint32_t fn_flags2;\n" : '') . <<<'EOF'
         void *reserved[6];
     } op_array;
 } zend_function;
-EOF . (self::supportsPhp86() ? "extern zend_function **zend_flf_functions;\n" : '') . <<<'EOF'
+EOF . <<<'EOF'
 typedef struct _zend_stack {
     int size;
     int top;
@@ -838,6 +839,7 @@ void free_estring(zend_string **foo);
 EOF . (ZEND_THREAD_SAFE
 ? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nextern int compiler_globals_id;\nextern size_t compiler_globals_offset;\nvoid *tsrm_get_ls_cache(void);\nvoid *ts_resource_ex(int id, void *thread_id);\n"
 : "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), $library);
+                self::$library = $library;
                 self::functionTable();
                 break;
             } catch (\FFI\Exception|RuntimeException $exception) {
@@ -948,13 +950,23 @@ EOF . (ZEND_THREAD_SAFE
             return null;
         }
 
-        $functions = self::def()->zend_flf_functions;
+        $library = self::$library;
+
+        // Keep this binding scalar-only and short-lived. PHP 8.6's Windows TS
+        // FFI extension can crash while destroying a long-lived extern pointer
+        // declaration during request shutdown.
+        $flf = FFI::cdef(
+            'typedef unsigned long long zendful_uintptr; extern zendful_uintptr *zend_flf_functions;',
+            $library,
+        );
+        $functions = $flf->zend_flf_functions;
         for ($current = 0; ; $current++) {
-            $function = $functions[$current];
-            if (FFI::isNull($function)) {
+            $address = $functions[$current];
+            if ($address === 0) {
                 return null;
             }
             if ($current === $index) {
+                $function = self::def()->cast('zend_function *', $address);
                 $name = $function->function_name;
                 if ($name === null || FFI::isNull($name)) {
                     return null;
