@@ -7,11 +7,19 @@ mkdir -p "$build_directory"
 
 library="$build_directory/libzendful_crash_diagnostics.so"
 source="$project_root/tools/crash-diagnostics/linux.c"
-if ! command -v php-config >/dev/null 2>&1; then
-  echo 'php-config is required to locate the PHP headers.' >&2
+php_binary=$(command -v php || true)
+if [[ -z "$php_binary" ]]; then
+  echo 'php is required to run crash diagnostics.' >&2
   exit 1
 fi
-php_include_flags=$(php-config --includes)
+php_binary=$(readlink -f "$php_binary")
+php_directory=$(dirname "$php_binary")
+php_config="$php_directory/php-config"
+if [[ ! -x "$php_config" ]]; then
+  echo "php-config for the active PHP binary was not found: $php_config" >&2
+  exit 1
+fi
+php_include_flags=$("$php_config" --includes)
 if [[ ! -f "$library" || "$source" -nt "$library" ]]; then
   # php-config points at the headers belonging to the active PHP binary.
   # The repository's local php-src checkout is intentionally not required.
@@ -19,4 +27,4 @@ if [[ ! -f "$library" || "$source" -nt "$library" ]]; then
 fi
 
 export ZENDFUL_CRASH_DIAGNOSTICS_LIBRARY="$library"
-exec php -d auto_prepend_file="$project_root/tools/crash-diagnostics/preload.php" "$@"
+exec "$php_binary" -d auto_prepend_file="$project_root/tools/crash-diagnostics/preload.php" "$@"

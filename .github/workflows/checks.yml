@@ -79,6 +79,29 @@ jobs:
           ini-values: ffi.enable=true
           coverage: none
 
+      - name: Install matching PHP development headers (Windows)
+        if: matrix.os.name == 'Windows'
+        shell: pwsh
+        run: |
+          $php = (Get-Command php).Source
+          $phpDirectory = Split-Path $php
+          $version = & $php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION . "." . PHP_RELEASE_VERSION;'
+          $nts = & $php -r 'echo PHP_ZTS ? "" : "-nts";'
+          $archive = Join-Path $env:RUNNER_TEMP "php-devel-pack-$version$nts.zip"
+          $extractDirectory = Join-Path $env:RUNNER_TEMP 'php-devel-pack'
+          $url = "https://windows.php.net/downloads/releases/php-devel-pack-$version$nts-Win32-vs17-x64.zip"
+
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath $extractDirectory -Force
+          $sourceInclude = Join-Path $extractDirectory 'include'
+          if (!(Test-Path -LiteralPath (Join-Path $sourceInclude 'Zend\zend_config.w32.h'))) {
+              throw "The PHP development pack did not contain the expected headers: $url"
+          }
+
+          New-Item -ItemType Directory -Path (Join-Path $phpDirectory 'include') -Force | Out-Null
+          Copy-Item -Path (Join-Path $sourceInclude '*') -Destination (Join-Path $phpDirectory 'include') -Recurse -Force
+          Write-Host "Installed PHP $version development headers beside $php"
+
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
 

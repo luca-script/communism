@@ -31,7 +31,8 @@ if (!(Test-Path -LiteralPath $vcvars)) {
 
 $objectFile = Join-Path $buildDirectory 'windows.obj'
 $importLibrary = Join-Path $buildDirectory 'zendful_crash_diagnostics.lib'
-$phpDirectory = Split-Path (Get-Command php).Source
+$php = (Get-Command php).Source
+$phpDirectory = Split-Path $php
 $phpInclude = Join-Path $phpDirectory 'include'
 $phpImportLibrary = Join-Path $phpDirectory 'php8embed.lib'
 if (!(Test-Path -LiteralPath $phpImportLibrary)) {
@@ -49,5 +50,5 @@ if (!(Test-Path -LiteralPath $library) -or (Get-Item -LiteralPath $source).LastW
 
 $env:ZENDFUL_CRASH_DIAGNOSTICS_LIBRARY = $library
 $preload = Join-Path $projectRoot 'tools\crash-diagnostics\preload.php'
-& php '-d' "auto_prepend_file=$preload" @PhpArgument
+& $php '-d' "auto_prepend_file=$preload" @PhpArgument
 exit $LASTEXITCODE
