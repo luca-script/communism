@@ -42,7 +42,7 @@ if (!(Test-Path -LiteralPath (Join-Path $phpInclude 'Zend\zend_config.w32.h'))) 
     throw "PHP development headers were not found in the PHP installation: $phpInclude"
 }
 if (!(Test-Path -LiteralPath $library) -or (Get-Item -LiteralPath $source).LastWriteTimeUtc -gt (Get-Item -LiteralPath $library).LastWriteTimeUtc) {
-    cmd /c "call `"$vcvars`" && cl /nologo /LD /DZEND_WIN32 /DZEND_DEBUG=0 /DZEND_MM_ALIGNMENT=8 /DZEND_MM_ALIGNMENT_LOG2=3 /I`"$phpInclude`" /I`"$phpInclude\main`" /I`"$phpInclude\Zend`" /I`"$phpInclude\TSRM`" /Fo`"$objectFile`" `"$source`" /link /OUT:`"$library`" /IMPLIB:`"$importLibrary`" `"$phpImportLibrary`" dbghelp.lib"
+    cmd /c "call `"$vcvars`" && cl /nologo /LD /DPHP_WIN32 /DZEND_WIN32 /DZEND_DEBUG=0 /DZEND_MM_ALIGNMENT=8 /DZEND_MM_ALIGNMENT_LOG2=3 /I`"$phpInclude`" /I`"$phpInclude\main`" /I`"$phpInclude\Zend`" /I`"$phpInclude\TSRM`" /Fo`"$objectFile`" `"$source`" /link /OUT:`"$library`" /IMPLIB:`"$importLibrary`" `"$phpImportLibrary`" dbghelp.lib"
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
