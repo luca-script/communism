@@ -960,21 +960,30 @@ EOF . (ZEND_THREAD_SAFE
             $library,
         );
         $functions = $flf->zend_flf_functions;
+        $address = null;
         for ($current = 0; ; $current++) {
             $address = $functions[$current];
             if ($address === 0) {
-                return null;
+                break;
             }
             if ($current === $index) {
-                $function = self::def()->cast('zend_function *', $address);
-                $name = $function->function_name;
-                if ($name === null || FFI::isNull($name)) {
-                    return null;
-                }
-
-                return self::zendString($name);
+                break;
             }
         }
+
+        unset($functions, $flf);
+
+        if ($address === null || $address === 0) {
+            return null;
+        }
+
+        $function = self::def()->cast('zend_function *', $address);
+        $name = $function->function_name;
+        if ($name === null || FFI::isNull($name)) {
+            return null;
+        }
+
+        return self::zendString($name);
     }
 
     /** @param \Zendful_FFI\zend_string $string */
