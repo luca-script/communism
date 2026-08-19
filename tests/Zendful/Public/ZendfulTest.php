@@ -27,12 +27,35 @@ function zendfulCoverageSecond(): string
     return 'second';
 }
 
+function zendfulFramelessCoverage(string $value): string
+{
+    return strtoupper($value);
+}
+
 it('creates opaque function handles', function (): void {
     $handle = Zendful::function('zendfulCoverageFirst');
 
     expect($handle)
         ->toBeInstanceOf(FunctionHandle::class)
         ->and($handle->name())->toBe('zendfulCoverageFirst');
+});
+
+it('resolves PHP 8.6 frameless dispatch entries through the public boundary', function (): void {
+    $opArray = Zendful::function('zendfulFramelessCoverage')->opArray();
+    $found = false;
+    for ($index = 0; $index < $opArray->instructionCount(); $index++) {
+        $opcode = $opArray->opcode($index);
+        if (!str_contains($opcode->name(), 'FRAMELESS_ICALL_')) {
+            continue;
+        }
+
+        $found = true;
+        expect(Zendful::framelessFunction($opcode->extendedValue())?->name())->toBe('strtoupper');
+    }
+
+    if (!$found) {
+        expect(Zendful::framelessFunction(0))->toBeNull();
+    }
 });
 
 it('rejects empty function names', function (): void {

@@ -39,15 +39,16 @@ final readonly class Instruction
         public int $line = 0,
         public ?object $handler = null,
         public ?int $originalIndex = null,
+        public ?string $invocationTarget = null,
     ) {}
 
     public function withOpcode(int $opcode, string $name, ?object $handler = null): self
     {
-        return new self($opcode, $name, $this->result, $this->operand1, $this->operand2, $this->extendedValue, $this->line, $handler ?? $this->handler, $this->originalIndex);
+        return new self($opcode, $name, $this->result, $this->operand1, $this->operand2, $this->extendedValue, $this->line, $handler ?? $this->handler, $this->originalIndex, $this->invocationTarget);
     }
 
     public function withOperands(Operand $operand1, Operand $operand2, ?Operand $result = null): self
     {
-        return new self($this->opcode, $this->name, $result ?? $this->result, $operand1, $operand2, $this->extendedValue, $this->line, $this->handler, $this->originalIndex);
+        return new self($this->opcode, $this->name, $result ?? $this->result, $operand1, $operand2, $this->extendedValue, $this->line, $this->handler, $this->originalIndex, $this->invocationTarget);
     }
 }

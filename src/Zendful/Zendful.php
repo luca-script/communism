@@ -42,6 +42,12 @@ final class Zendful
         return new FunctionHandle($name);
     }
 
+    /** Resolve a PHP 8.6+ frameless-call dispatch-table entry. */
+    public static function framelessFunction(int $index): ?FunctionHandle
+    {
+        return Internals\Executor::framelessFunction($index);
+    }
+
     public static function method(string $className, string $methodName): MethodHandle
     {
         if ($className === '' || $methodName === '' || str_contains($className, "\0") || str_contains($methodName, "\0")) {

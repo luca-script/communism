@@ -61,6 +61,15 @@ namespace Zendful_FFI {
         public function offsetUnset(mixed $offset): void {}
     }
 
+    /** @implements \ArrayAccess<int, zend_function> */
+    final class zend_function_pointer implements \ArrayAccess
+    {
+        public function offsetExists(mixed $offset): bool {}
+        public function offsetGet(mixed $offset): zend_function {}
+        public function offsetSet(mixed $offset, mixed $value): void {}
+        public function offsetUnset(mixed $offset): void {}
+    }
+
     /** @implements \ArrayAccess<int, zend_string> */
     final class zend_string_pointer implements \ArrayAccess
     {
@@ -526,6 +535,7 @@ namespace {
         public int $compiler_globals_id;
         public int $compiler_globals_offset;
         public \Zendful_FFI\zend_compiler_globals $compiler_globals;
+        public \Zendful_FFI\zend_function_pointer $zend_flf_functions;
 
         /**
          * @phpstan-return (

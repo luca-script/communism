@@ -679,6 +679,7 @@ EOF . (self::supportsPhp86() ? "        uint32_t fn_flags2;\n" : '') . <<<'EOF'
         void *reserved[6];
     } op_array;
 } zend_function;
+EOF . (self::supportsPhp86() ? "extern zend_function **zend_flf_functions;\n" : '') . <<<'EOF'
 typedef struct _zend_stack {
     int size;
     int top;
@@ -939,6 +940,25 @@ EOF . (ZEND_THREAD_SAFE
         // @codeCoverageIgnoreEnd
 
         return $def->compiler_globals;
+    }
+
+    /** @return \Zendful_FFI\zend_function|null */
+    public static function framelessFunction(int $index): ?object
+    {
+        if (!self::supportsPhp86() || $index < 0) {
+            return null;
+        }
+
+        $functions = self::def()->zend_flf_functions;
+        for ($current = 0; ; $current++) {
+            $function = $functions[$current];
+            if (FFI::isNull($function)) {
+                return null;
+            }
+            if ($current === $index) {
+                return $function;
+            }
+        }
     }
 
     /**

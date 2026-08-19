@@ -771,7 +771,9 @@ final class Matcher
 
         if (preg_match('/^FRAMELESS_ICALL_[0-3]$/', $init->name) === 1) {
             return $spec->kind === InvocationSpec::FUNCTION
-                && self::matchesFramelessFunction($body, $start, $spec->name);
+                && (($init->invocationTarget !== null && InvocationSpec::matchesName($init->invocationTarget, $spec->name))
+                    || self::matchesFramelessFunction($body, $start, $spec->name))
+                && $spec->acceptsArgumentCount(self::invocationArguments($body, $start, $end));
         }
 
         $name = $init->operand1->kind === Operand::CONSTANT && is_string($init->operand1->value) ? $init->operand1->value : null;
@@ -797,6 +799,10 @@ final class Matcher
 
     private static function matchesFramelessFunction(MethodBody $body, int $start, string $pattern): bool
     {
+        if ($body->instruction($start)->invocationTarget !== null) {
+            return InvocationSpec::matchesName($body->instruction($start)->invocationTarget, $pattern);
+        }
+
         for ($index = $start - 1; $index >= 0; $index--) {
             $instruction = $body->instruction($index);
             if ($instruction->name === 'JMP_FRAMELESS') {

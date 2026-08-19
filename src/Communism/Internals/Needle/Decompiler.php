@@ -40,6 +40,8 @@ use Zendful\OpArrayHandle;
 use Zendful\OperandHandle;
 use Zendful\Zendful;
 
+use function preg_match;
+
 use function is_array;
 use function is_object;
 use function is_string;
@@ -66,9 +68,13 @@ final class Decompiler
         $instructions = [];
         for ($index = 0; $index < $opArray->instructionCount(); $index++) {
             $opline = $opArray->opcode($index);
+            $opcodeName = self::handleOpcodeName($opline->name(), $opline->opcode());
+            $framelessFunction = preg_match('/^FRAMELESS_ICALL_[0-3]$/', $opcodeName) === 1
+                ? Zendful::framelessFunction($opline->extendedValue())
+                : null;
             $instructions[] = new Instruction(
                 $opline->opcode(),
-                self::handleOpcodeName($opline->name(), $opline->opcode()),
+                $opcodeName,
                 self::handleOperand($opline->result()),
                 self::handleOperand($opline->operand1()),
                 self::handleOperand($opline->operand2()),
@@ -76,6 +82,7 @@ final class Decompiler
                 $opline->line(),
                 null,
                 $index,
+                $framelessFunction?->name(),
             );
         }
 
