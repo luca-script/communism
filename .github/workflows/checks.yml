@@ -93,10 +93,12 @@ jobs:
 
           Invoke-WebRequest -Uri $url -OutFile $archive
           Expand-Archive -Path $archive -DestinationPath $extractDirectory -Force
-          $sourceInclude = Join-Path $extractDirectory 'include'
-          if (!(Test-Path -LiteralPath (Join-Path $sourceInclude 'Zend\zend_config.w32.h'))) {
+          $header = Get-ChildItem -LiteralPath $extractDirectory -Filter 'zend_config.w32.h' -File -Recurse |
+              Select-Object -First 1
+          if ($null -eq $header) {
               throw "The PHP development pack did not contain the expected headers: $url"
           }
+          $sourceInclude = Split-Path (Split-Path $header.FullName -Parent) -Parent
 
           New-Item -ItemType Directory -Path (Join-Path $phpDirectory 'include') -Force | Out-Null
           Copy-Item -Path (Join-Path $sourceInclude '*') -Destination (Join-Path $phpDirectory 'include') -Recurse -Force
