@@ -668,11 +668,16 @@ final class Matcher
 
     private static function isInvocationStart(string $name): bool
     {
-        return in_array($name, ['INIT_FCALL', 'INIT_NS_FCALL_BY_NAME', 'INIT_STATIC_METHOD_CALL', 'INIT_METHOD_CALL', 'INIT_DYNAMIC_CALL'], true);
+        return in_array($name, ['INIT_FCALL', 'INIT_NS_FCALL_BY_NAME', 'INIT_STATIC_METHOD_CALL', 'INIT_METHOD_CALL', 'INIT_DYNAMIC_CALL'], true)
+            || preg_match('/^FRAMELESS_ICALL_[0-3]$/', $name) === 1;
     }
 
     private static function invocationEnd(MethodBody $body, int $start): ?int
     {
+        if (preg_match('/^FRAMELESS_ICALL_[0-3]$/', $body->instruction($start)->name) === 1) {
+            return $start;
+        }
+
         for ($index = $start + 1; $index < $body->count(); $index++) {
             if (in_array($body->instruction($index)->name, ['DO_FCALL', 'DO_ICALL', 'DO_UCALL', 'DO_FCALL_BY_NAME', 'DO_METHOD_CALL', 'DO_STATIC_METHOD_CALL'], true)) {
                 return $index;
@@ -708,6 +713,10 @@ final class Matcher
 
     private static function invocationArguments(MethodBody $body, int $start, int $end): int
     {
+        if (preg_match('/^FRAMELESS_ICALL_([0-3])$/', $body->instruction($start)->name, $matches) === 1) {
+            return (int) $matches[1];
+        }
+
         $arguments = 0;
         for ($index = $start + 1; $index < $end; $index++) {
             if (str_starts_with($body->instruction($index)->name, 'SEND')) {
@@ -721,6 +730,11 @@ final class Matcher
     private static function matchesInvocation(MethodBody $body, int $start, int $end, InvocationSpec $spec): bool
     {
         $init = $body->instruction($start);
+        if (preg_match('/^FRAMELESS_ICALL_[0-3]$/', $init->name) === 1) {
+            return $spec->kind === InvocationSpec::FUNCTION
+                && self::matchesFramelessFunction($body, $start, $spec->name);
+        }
+
         $name = $init->operand1->kind === Operand::CONSTANT && is_string($init->operand1->value) ? $init->operand1->value : null;
         $member = $init->operand2->kind === Operand::CONSTANT && is_string($init->operand2->value) ? $init->operand2->value : null;
         $calledName = $member ?? $name;
@@ -738,5 +752,23 @@ final class Matcher
             InvocationSpec::MEMBER => $init->name === 'INIT_METHOD_CALL' && $member !== null && InvocationSpec::matchesName($member, $spec->name),
             default => false,
         };
+    }
+
+    private static function matchesFramelessFunction(MethodBody $body, int $start, string $pattern): bool
+    {
+        for ($index = $start - 1; $index >= 0; $index--) {
+            $instruction = $body->instruction($index);
+            if ($instruction->name === 'JMP_FRAMELESS') {
+                return $instruction->operand1->kind === Operand::CONSTANT
+                    && is_string($instruction->operand1->value)
+                    && InvocationSpec::matchesName($instruction->operand1->value, $pattern);
+            }
+
+            if (self::isInvocationStart($instruction->name)) {
+                return false;
+            }
+        }
+
+        return false;
     }
 }

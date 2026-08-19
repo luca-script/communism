@@ -66,8 +66,21 @@ it('covers Matcher operand and boundary helpers', function (): void {
         ->and($call('isBuiltIn', 'HEAD'))->toBeTrue()
         ->and($call('isBuiltIn', '_CUSTOM'))->toBeFalse()
         ->and($call('isInvocationStart', 'INIT_FCALL'))->toBeTrue()
+        ->and($call('isInvocationStart', 'FRAMELESS_ICALL_1'))->toBeTrue()
         ->and($call('isInvocationStart', 'RETURN'))->toBeFalse()
         ->and($call('invocationEnd', $body, 1))->toBeNull();
+});
+
+it('matches PHP 8.6 frameless internal calls through their dispatch branch', function (): void {
+    $unused = Operand::unused();
+    $body = new MethodBody('frameless', null, 0, 0, [
+        new Instruction(0, 'JMP_FRAMELESS', $unused, Operand::constant('strtoupper', 0), $unused),
+        new Instruction(0, 'FRAMELESS_ICALL_1', Operand::temporary(0), Operand::cv(0), $unused),
+    ]);
+
+    expect(Matcher::find($body, new At('INVOKE', 'strtoupper')))->toHaveCount(1)
+        ->and(Matcher::find($body, new At('INVOKE', 'strtolower')))->toBe([])
+        ->and(Matcher::find($body, new At('INVOKE', 'strtoupper'), argumentIndex: 0))->toHaveCount(1);
 });
 
 it('covers Matcher validation and slice boundaries', function (): void {
