@@ -306,7 +306,11 @@ final class Matcher
             }
             $spec = InvocationSpec::parse($target);
             $matches = [];
+            $coveredUntil = -1;
             foreach ($body->instructions() as $index => $instruction) {
+                if ($index <= $coveredUntil) {
+                    continue;
+                }
                 if (!self::isInvocationStart($instruction->name)) {
                     continue;
                 }
@@ -320,6 +324,7 @@ final class Matcher
                 }
 
                 $matchEnd = $end + 1;
+                $coveredUntil = $matchEnd - 1;
                 if ($type === 'invoke_assign') {
                     $assignment = $body->instructions()[$matchEnd] ?? null;
                     $call = $body->instruction($end);
@@ -671,12 +676,27 @@ final class Matcher
 
     private static function isInvocationStart(string $name): bool
     {
-        return in_array($name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME', 'INIT_NS_FCALL_BY_NAME', 'INIT_STATIC_METHOD_CALL', 'INIT_METHOD_CALL', 'INIT_DYNAMIC_CALL'], true)
+        return in_array($name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME', 'INIT_NS_FCALL_BY_NAME', 'INIT_STATIC_METHOD_CALL', 'INIT_METHOD_CALL', 'INIT_DYNAMIC_CALL', 'JMP_FRAMELESS'], true)
             || preg_match('/^FRAMELESS_ICALL_[0-3]$/', $name) === 1;
     }
 
     private static function invocationEnd(MethodBody $body, int $start): ?int
     {
+        if ($body->instruction($start)->name === 'JMP_FRAMELESS') {
+            $fallbackEnd = null;
+            for ($index = $start + 1; $index < $body->count(); $index++) {
+                $name = $body->instruction($index)->name;
+                if (preg_match('/^FRAMELESS_ICALL_[0-3]$/', $name) === 1) {
+                    return $index;
+                }
+                if (in_array($name, ['DO_FCALL', 'DO_ICALL', 'DO_UCALL', 'DO_FCALL_BY_NAME'], true)) {
+                    $fallbackEnd = $index;
+                }
+            }
+
+            return $fallbackEnd;
+        }
+
         if (preg_match('/^FRAMELESS_ICALL_[0-3]$/', $body->instruction($start)->name) === 1) {
             return $start;
         }
@@ -716,6 +736,14 @@ final class Matcher
 
     private static function invocationArguments(MethodBody $body, int $start, int $end): int
     {
+        if ($body->instruction($start)->name === 'JMP_FRAMELESS') {
+            for ($index = $start + 1; $index <= $end; $index++) {
+                if (preg_match('/^FRAMELESS_ICALL_([0-3])$/', $body->instruction($index)->name, $matches) === 1) {
+                    return (int) $matches[1];
+                }
+            }
+        }
+
         if (preg_match('/^FRAMELESS_ICALL_([0-3])$/', $body->instruction($start)->name, $matches) === 1) {
             return (int) $matches[1];
         }
@@ -733,6 +761,14 @@ final class Matcher
     private static function matchesInvocation(MethodBody $body, int $start, int $end, InvocationSpec $spec): bool
     {
         $init = $body->instruction($start);
+        if ($init->name === 'JMP_FRAMELESS') {
+            return $spec->kind === InvocationSpec::FUNCTION
+                && $init->operand1->kind === Operand::CONSTANT
+                && is_string($init->operand1->value)
+                && InvocationSpec::matchesName($init->operand1->value, $spec->name)
+                && $spec->acceptsArgumentCount(self::invocationArguments($body, $start, $end));
+        }
+
         if (preg_match('/^FRAMELESS_ICALL_[0-3]$/', $init->name) === 1) {
             return $spec->kind === InvocationSpec::FUNCTION
                 && self::matchesFramelessFunction($body, $start, $spec->name);
