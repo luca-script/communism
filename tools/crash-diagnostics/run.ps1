@@ -31,12 +31,16 @@ if (!(Test-Path -LiteralPath $vcvars)) {
 
 $objectFile = Join-Path $buildDirectory 'windows.obj'
 $importLibrary = Join-Path $buildDirectory 'zendful_crash_diagnostics.lib'
-$phpImportLibrary = Join-Path (Split-Path (Get-Command php).Source) 'php8embed.lib'
+$phpDirectory = Split-Path (Get-Command php).Source
+$phpInclude = Join-Path $phpDirectory 'include'
+$phpImportLibrary = Join-Path $phpDirectory 'php8embed.lib'
 if (!(Test-Path -LiteralPath $phpImportLibrary)) {
     throw "PHP import library was not found: $phpImportLibrary"
 }
+if (!(Test-Path -LiteralPath (Join-Path $phpInclude 'Zend\zend_config.w32.h'))) {
+    throw "PHP development headers were not found in the PHP installation: $phpInclude"
+}
 if (!(Test-Path -LiteralPath $library) -or (Get-Item -LiteralPath $source).LastWriteTimeUtc -gt (Get-Item -LiteralPath $library).LastWriteTimeUtc) {
-    $phpInclude = Join-Path $projectRoot 'php-src'
     cmd /c "call `"$vcvars`" && cl /nologo /LD /DZEND_WIN32 /DZEND_DEBUG=0 /DZEND_MM_ALIGNMENT=8 /DZEND_MM_ALIGNMENT_LOG2=3 /I`"$phpInclude`" /I`"$phpInclude\main`" /I`"$phpInclude\Zend`" /I`"$phpInclude\TSRM`" /Fo`"$objectFile`" `"$source`" /link /OUT:`"$library`" /IMPLIB:`"$importLibrary`" `"$phpImportLibrary`" dbghelp.lib"
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE

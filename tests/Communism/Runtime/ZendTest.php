@@ -17,7 +17,7 @@ final class JitBlacklistDestructorProbe
     }
 }
 
-final class JitBlacklistTestZend extends Zend
+final class JitBlacklistTestReplacement
 {
     public static function disableJitForMethod(string $className, string $method): void
     {
@@ -34,7 +34,7 @@ it('does not instantiate classes while blacklisting instance methods', function 
     expect(JitBlacklistDestructorProbe::$destructorCalls)->toBe(0);
 
     $method = new ReflectionMethod(Zend::class, 'disableJitForMethod');
-    $replacement = new ReflectionMethod(JitBlacklistTestZend::class, 'disableJitForMethod');
+    $replacement = new ReflectionMethod(JitBlacklistTestReplacement::class, 'disableJitForMethod');
     $swapped = false;
     try {
         $method->swap($replacement);
