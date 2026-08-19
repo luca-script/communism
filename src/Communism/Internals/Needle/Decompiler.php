@@ -41,7 +41,6 @@ use Zendful\OperandHandle;
 use Zendful\Zendful;
 
 use function preg_match;
-
 use function is_array;
 use function is_object;
 use function is_string;
