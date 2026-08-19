@@ -17,14 +17,18 @@ final class JitBlacklistDestructorProbe
     }
 }
 
-// @phpstan-ignore-next-line class.extendsFinal
-final class JitBlacklistTestReplacement extends Zend
+// Zend is un-finalized by the Communism test bootstrap before this fixture is
+// declared. Keeping the declaration dynamic prevents PHPStan from treating
+// the source-level final flag as the runtime truth.
+eval(<<<'PHP'
+final class JitBlacklistTestReplacement extends \Communism\Internals\Zend
 {
     public static function disableJitForMethod(string $className, string $method): void
     {
-        JitBlacklistDestructorProbe::$blacklistCalls++;
+        \JitBlacklistDestructorProbe::$blacklistCalls++;
     }
 }
+PHP);
 
 it('does not instantiate classes while blacklisting instance methods', function (): void {
     expect(function_exists('opcache_jit_blacklist'))->toBeTrue();
@@ -35,7 +39,7 @@ it('does not instantiate classes while blacklisting instance methods', function 
     expect(JitBlacklistDestructorProbe::$destructorCalls)->toBe(0);
 
     $method = new ReflectionMethod(Zend::class, 'disableJitForMethod');
-    $replacement = new ReflectionMethod(JitBlacklistTestReplacement::class, 'disableJitForMethod');
+    $replacement = new ReflectionMethod('JitBlacklistTestReplacement', 'disableJitForMethod');
     $swapped = false;
     try {
         $method->swap($replacement);
