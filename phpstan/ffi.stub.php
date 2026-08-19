@@ -12,7 +12,8 @@ namespace Zendful_FFI {
 
     final class LinuxInfo
     {
-        public object $dlpi_name;
+        /** @type object|null */
+        public ?object $dlpi_name;
     }
 
     interface WindowsApi

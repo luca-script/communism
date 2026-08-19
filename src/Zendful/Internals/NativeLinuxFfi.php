@@ -60,10 +60,14 @@ CDEF);
             /** @var \Zendful_FFI\LinuxInfo $typedInfo */
             $typedInfo = $info;
             $namePointer = $typedInfo->dlpi_name;
+            // Runtime safety
+            // @phpstan-ignore function.alreadyNarrowedType, identical.alwaysFalse
             if ($namePointer === null || (is_object($namePointer) && $this->isNull($namePointer))) {
                 return 0;
             }
 
+            // Runtime safety
+            // @phpstan-ignore function.alreadyNarrowedType, function.impossibleType
             $name = is_string($namePointer) ? $namePointer : $this->string($namePointer);
             if (1 !== preg_match('~(?:^|/)(?:lib)?php[^/]*\.so(?:\.[^/]*)?$~i', $name)) {
                 return 0;

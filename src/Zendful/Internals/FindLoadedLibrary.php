@@ -85,11 +85,11 @@ final class FindLoadedLibrary
     private static function phpOnLinux(?LinuxFfi $ffi = null): array
     {
         $libraries = self::phpFromDlIteratePhdr($ffi);
-        if (!is_file('/proc/self/maps')) {
+        if (!self::filesystemIsFile('/proc/self/maps')) {
             return $libraries;
         }
 
-        $maps = file('/proc/self/maps', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $maps = self::filesystemFile('/proc/self/maps', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if (false === $maps) {
             return $libraries;
         }
@@ -98,6 +98,33 @@ final class FindLoadedLibrary
             ...$libraries,
             ...self::phpFromLinuxMaps($maps),
         ]));
+    }
+
+    private static function filesystemIsFile(string $filename): bool
+    {
+        $function = __NAMESPACE__ . '\\is_file';
+        if (function_exists($function)) {
+            return $function($filename);
+        }
+
+        return is_file($filename);
+    }
+
+    /**
+     * @param 0|1|2|3|4|5|6|7|16|17|18|19|20|21|22|23 $flags
+     * @return list<string>|false
+     */
+    private static function filesystemFile(string $filename, int $flags): array|false
+    {
+        $function = __NAMESPACE__ . '\\file';
+        if (function_exists($function)) {
+            /** @var list<string>|false $lines */
+            $lines = $function($filename, $flags);
+
+            return $lines;
+        }
+
+        return file($filename, $flags);
     }
 
     /** @return list<string> */
