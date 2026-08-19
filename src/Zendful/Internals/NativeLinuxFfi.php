@@ -60,11 +60,11 @@ CDEF);
             /** @var \Zendful_FFI\LinuxInfo $typedInfo */
             $typedInfo = $info;
             $namePointer = $typedInfo->dlpi_name;
-            if ($this->isNull($namePointer)) {
+            if ($namePointer === null || (is_object($namePointer) && $this->isNull($namePointer))) {
                 return 0;
             }
 
-            $name = $this->string($namePointer);
+            $name = is_string($namePointer) ? $namePointer : $this->string($namePointer);
             if (1 !== preg_match('~(?:^|/)(?:lib)?php[^/]*\.so(?:\.[^/]*)?$~i', $name)) {
                 return 0;
             }
