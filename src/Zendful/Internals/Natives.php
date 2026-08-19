@@ -942,8 +942,7 @@ EOF . (ZEND_THREAD_SAFE
         return $def->compiler_globals;
     }
 
-    /** @return \Zendful_FFI\zend_function|null */
-    public static function framelessFunction(int $index): ?object
+    public static function framelessFunctionName(int $index): ?string
     {
         if (!self::supportsPhp86() || $index < 0) {
             return null;
@@ -956,9 +955,27 @@ EOF . (ZEND_THREAD_SAFE
                 return null;
             }
             if ($current === $index) {
-                return $function;
+                $name = $function->function_name;
+                if ($name === null || FFI::isNull($name)) {
+                    return null;
+                }
+
+                return self::zendString($name);
             }
         }
+    }
+
+    /** @param \Zendful_FFI\zend_string $string */
+    private static function zendString(object $string): string
+    {
+        if ($string->len <= 0) {
+            return '';
+        }
+        if ($string->len > self::ZEND_MAX_SAFE_STRING_LENGTH) {
+            throw new RuntimeException('Zend string exceeds Zendful safety limits.');
+        }
+
+        return FFI::string(self::def()->cast('char *', $string->val), $string->len);
     }
 
     /**

@@ -624,12 +624,12 @@ final class Executor
 
     public static function framelessFunction(int $index): ?FunctionHandle
     {
-        $function = Natives::framelessFunction($index);
-        if ($function === null || $function->function_name === null || FFI::isNull($function->function_name)) {
+        $name = Natives::framelessFunctionName($index);
+        if ($name === null) {
             return null;
         }
 
-        return new FunctionHandle(self::zendString(self::ffi(), $function->function_name));
+        return new FunctionHandle($name);
     }
 
     public static function isUserDefined(FunctionHandle $function): bool
