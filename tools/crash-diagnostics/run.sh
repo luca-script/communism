@@ -27,4 +27,16 @@ if [[ ! -f "$library" || "$source" -nt "$library" ]]; then
 fi
 
 export ZENDFUL_CRASH_DIAGNOSTICS_LIBRARY="$library"
-exec "$php_binary" -d auto_prepend_file="$project_root/tools/crash-diagnostics/preload.php" "$@"
+if "$php_binary" \
+    -d display_errors=1 \
+    -d log_errors=1 \
+    -d auto_prepend_file="$project_root/tools/crash-diagnostics/preload.php" \
+    "$@"; then
+  status=0
+else
+  status=$?
+fi
+if [[ $status -ne 0 ]]; then
+  echo "Crash-diagnostics PHP process exited with status $status." >&2
+fi
+exit "$status"

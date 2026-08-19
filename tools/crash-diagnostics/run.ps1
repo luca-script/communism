@@ -50,5 +50,5 @@ if (!(Test-Path -LiteralPath $library) -or (Get-Item -LiteralPath $source).LastW
 
 $env:ZENDFUL_CRASH_DIAGNOSTICS_LIBRARY = $library
 $preload = Join-Path $projectRoot 'tools\crash-diagnostics\preload.php'
-& $php '-d' "auto_prepend_file=$preload" @PhpArgument
+& $php '-d' 'display_errors=1' '-d' 'log_errors=1' '-d' "auto_prepend_file=$preload" @PhpArgument
 exit $LASTEXITCODE
