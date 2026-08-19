@@ -17,7 +17,8 @@ final class JitBlacklistDestructorProbe
     }
 }
 
-final class JitBlacklistTestReplacement
+// @phpstan-ignore-next-line class.extendsFinal
+final class JitBlacklistTestReplacement extends Zend
 {
     public static function disableJitForMethod(string $className, string $method): void
     {
