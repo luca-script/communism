@@ -86,7 +86,7 @@ jobs:
           - name: 8.6 TS
             version: '8.6'
             phpts: ts
-        suite: [mixin, reflect, bytecode, internals, maintenance]
+        suite: [communism, zendful]
 
     runs-on: ${{ matrix.os.id }}
 
@@ -173,7 +173,7 @@ jobs:
         # process-start race and name collisions with PHPStan child processes.
         $process = Start-Process -FilePath $php -ArgumentList @(
             '.github\pest-runner.php',
-            ('tests\' + '${{ matrix.suite }}')
+            '--configuration=phpunit-${{ matrix.suite }}.xml'
         ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -NoNewWindow
 
         $monitor = $null
