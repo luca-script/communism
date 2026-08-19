@@ -75,6 +75,9 @@ it('matches PHP 8.6 frameless internal calls through their dispatch branch', fun
     $unused = Operand::unused();
     $body = new MethodBody('frameless', null, 0, 0, [
         new Instruction(0, 'JMP_FRAMELESS', $unused, Operand::constant('strtoupper', 0), $unused),
+        new Instruction(0, 'INIT_FCALL', $unused, $unused, Operand::constant('strtoupper', 0)),
+        new Instruction(0, 'SEND_VAR', $unused, Operand::cv(0), $unused),
+        new Instruction(0, 'DO_ICALL', Operand::temporary(1), $unused, $unused),
         new Instruction(0, 'FRAMELESS_ICALL_1', Operand::temporary(0), Operand::cv(0), $unused),
     ]);
 

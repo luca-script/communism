@@ -310,6 +310,9 @@ final class Matcher
                 if (!self::isInvocationStart($instruction->name)) {
                     continue;
                 }
+                if (self::isFramelessFallback($body, $index)) {
+                    continue;
+                }
 
                 $end = self::invocationEnd($body, $index);
                 if ($end === null || !self::matchesInvocation($body, $index, $end, $spec)) {
@@ -764,11 +767,13 @@ final class Matcher
                     && InvocationSpec::matchesName($instruction->operand1->value, $pattern);
             }
 
-            if (self::isInvocationStart($instruction->name)) {
-                return false;
-            }
         }
 
         return false;
+    }
+
+    private static function isFramelessFallback(MethodBody $body, int $start): bool
+    {
+        return $start > 0 && $body->instruction($start - 1)->name === 'JMP_FRAMELESS';
     }
 }
