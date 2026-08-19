@@ -66,9 +66,22 @@ it('covers Matcher operand and boundary helpers', function (): void {
         ->and($call('isBuiltIn', 'HEAD'))->toBeTrue()
         ->and($call('isBuiltIn', '_CUSTOM'))->toBeFalse()
         ->and($call('isInvocationStart', 'INIT_FCALL'))->toBeTrue()
+        ->and($call('isInvocationStart', 'INIT_FCALL_BY_NAME'))->toBeTrue()
         ->and($call('isInvocationStart', 'FRAMELESS_ICALL_1'))->toBeTrue()
         ->and($call('isInvocationStart', 'RETURN'))->toBeFalse()
         ->and($call('invocationEnd', $body, 1))->toBeNull();
+});
+
+it('matches named function calls emitted by newer PHP builds', function (): void {
+    $unused = Operand::unused();
+    $body = new MethodBody('named-call', null, 0, 0, [
+        new Instruction(0, 'INIT_FCALL_BY_NAME', $unused, $unused, Operand::constant('strtoupper', 0)),
+        new Instruction(0, 'SEND_VAR', $unused, Operand::cv(0), $unused),
+        new Instruction(0, 'DO_FCALL', Operand::temporary(1), $unused, $unused),
+    ]);
+
+    expect(Matcher::find($body, new At('INVOKE', 'strtoupper')))->toHaveCount(1)
+        ->and(Matcher::find($body, new At('INVOKE', 'strtolower')))->toBe([]);
 });
 
 it('matches PHP 8.6 frameless internal calls through their dispatch branch', function (): void {

@@ -671,7 +671,7 @@ final class Matcher
 
     private static function isInvocationStart(string $name): bool
     {
-        return in_array($name, ['INIT_FCALL', 'INIT_NS_FCALL_BY_NAME', 'INIT_STATIC_METHOD_CALL', 'INIT_METHOD_CALL', 'INIT_DYNAMIC_CALL'], true)
+        return in_array($name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME', 'INIT_NS_FCALL_BY_NAME', 'INIT_STATIC_METHOD_CALL', 'INIT_METHOD_CALL', 'INIT_DYNAMIC_CALL'], true)
             || preg_match('/^FRAMELESS_ICALL_[0-3]$/', $name) === 1;
     }
 
@@ -747,7 +747,9 @@ final class Matcher
         }
 
         return match ($spec->kind) {
-            InvocationSpec::FUNCTION => $init->name === 'INIT_FCALL' && $calledName !== null && InvocationSpec::matchesName($calledName, $spec->name),
+            InvocationSpec::FUNCTION => in_array($init->name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME'], true)
+                && $calledName !== null
+                && InvocationSpec::matchesName($calledName, $spec->name),
             InvocationSpec::STATIC => $init->name === 'INIT_STATIC_METHOD_CALL'
                 && $member !== null
                 && InvocationSpec::matchesName($member, $spec->name)
