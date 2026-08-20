@@ -455,6 +455,7 @@ class Natives
     // @codeCoverageIgnoreStart
     private static function init(): FFI
     {
+        $useLoadedModule = PHP_OS_FAMILY !== 'Windows' || PHP_VERSION_ID >= 80_500;
         $callingConvention = self::callingConvention(PHP_OS_FAMILY, PHP_INT_SIZE);
         $fallbackLibraries = self::fallbackLibraries(
             PHP_OS_FAMILY,
@@ -838,8 +839,8 @@ void free_estring(zend_string **foo);
 
 EOF . (ZEND_THREAD_SAFE
 ? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nextern int compiler_globals_id;\nextern size_t compiler_globals_offset;\nvoid *tsrm_get_ls_cache(void);\nvoid *ts_resource_ex(int id, void *thread_id);\n"
-: "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), PHP_OS_FAMILY === 'Windows' ? null : $library);
-                self::$library = PHP_OS_FAMILY === 'Windows' ? null : $library;
+: "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), $useLoadedModule ? null : $library);
+                self::$library = $useLoadedModule ? null : $library;
                 self::functionTable();
                 break;
             } catch (\FFI\Exception|RuntimeException $exception) {
