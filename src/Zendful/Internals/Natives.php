@@ -838,8 +838,8 @@ void free_estring(zend_string **foo);
 
 EOF . (ZEND_THREAD_SAFE
 ? "extern int executor_globals_id;\nextern size_t executor_globals_offset;\nextern int compiler_globals_id;\nextern size_t compiler_globals_offset;\nvoid *tsrm_get_ls_cache(void);\nvoid *ts_resource_ex(int id, void *thread_id);\n"
-: "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), $library);
-                self::$library = $library;
+: "extern zend_executor_globals executor_globals;\nextern zend_compiler_globals compiler_globals;\n"), PHP_OS_FAMILY === 'Windows' ? null : $library);
+                self::$library = PHP_OS_FAMILY === 'Windows' ? null : $library;
                 self::functionTable();
                 break;
             } catch (\FFI\Exception|RuntimeException $exception) {
@@ -952,14 +952,15 @@ EOF . (ZEND_THREAD_SAFE
 
         $library = self::$library;
 
-        // Keep this binding scalar-only and short-lived. PHP 8.6's Windows TS
-        // FFI extension can crash while destroying a long-lived extern pointer
-        // declaration during request shutdown.
-        $flf = FFI::cdef(
+        // Keep this binding scalar-only. PHP 8.6's Windows TS FFI extension
+        // can crash while destroying a path-backed extern pointer declaration
+        // during request shutdown, so this uses the already-loaded process
+        // module and is created once per process.
+        self::$flf ??= FFI::cdef(
             'typedef unsigned long long zendful_uintptr; extern zendful_uintptr *zend_flf_functions;',
             $library,
         );
-        $functions = $flf->zend_flf_functions;
+        $functions = self::$flf->zend_flf_functions;
         $address = null;
         for ($current = 0; ; $current++) {
             $address = $functions[$current];
@@ -970,8 +971,6 @@ EOF . (ZEND_THREAD_SAFE
                 break;
             }
         }
-
-        unset($functions, $flf);
 
         if ($address === null || $address === 0) {
             return null;
