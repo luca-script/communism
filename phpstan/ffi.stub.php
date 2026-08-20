@@ -532,9 +532,9 @@ namespace {
      *     ($type is 'zend_function *' ? \Zendful_FFI\zend_function :
      *     ($type is 'zend_string *' ? \Zendful_FFI\zend_string :
      *     ($type is 'zval *' ? \Zendful_FFI\zval_pointer :
-      *     ($type is 'zendful_uintptr *' ? \Zendful_FFI\zendful_uintptr_pointer :
-      *     ($type is 'uintptr_t' ? \FFI\CData :
-     *     object)))))))))))))
+     *     ($type is 'zendful_uintptr *' ? \Zendful_FFI\zendful_uintptr_pointer :
+     *     ($type is 'uintptr_t' ? \FFI\CData :
+     *     object))))))))))))))
      * )) cast(string $type, object|bool|float|int|null|\Zendful_FFI\ptr<null> $ptr)
      */
     final class FFI
@@ -545,7 +545,7 @@ namespace {
         public int $compiler_globals_id;
         public int $compiler_globals_offset;
         public \Zendful_FFI\zend_compiler_globals $compiler_globals;
-         public int $zend_flf_functions;
+        public int $zend_flf_functions;
 
         /**
          * @phpstan-return (
