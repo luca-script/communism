@@ -449,7 +449,6 @@ class Natives
     private static ?FFI $def = null;
     private static ?string $library = null;
     private static ?FFI $flf = null;
-    private static bool $flfShutdownRegistered = false;
 
     /**
      * @return FFI
@@ -961,22 +960,15 @@ EOF . (ZEND_THREAD_SAFE
         // module and is created once per process.
         if (!(self::$flf instanceof FFI)) {
             self::$flf = FFI::cdef(
-                'typedef unsigned long long zendful_uintptr; extern zendful_uintptr *zend_flf_functions;',
+                'typedef unsigned long long zendful_uintptr; extern zendful_uintptr zend_flf_functions;',
                 $library,
             );
 
-            // PHP frees zend_flf_functions during Zend shutdown. Release the
-            // FFI binding during user shutdown first, while that symbol is
-            // still valid. This is required by PHP 8.6 TS on Windows, whose
-            // FFI destructor otherwise dereferences the released extern.
-            if (!self::$flfShutdownRegistered) {
-                self::$flfShutdownRegistered = true;
-                register_shutdown_function(static function (): void {
-                    self::$flf = null;
-                });
-            }
         }
-        $functions = self::$flf->zend_flf_functions;
+        // Keep the extern scalar-only. Casting its value here avoids making
+        // the FFI scope own a nested pointer type, which PHP 8.6 TS can
+        // corrupt while destroying the scope on Windows.
+        $functions = FFI::cast('zendful_uintptr *', self::$flf->zend_flf_functions);
         $address = null;
         for ($current = 0; ; $current++) {
             $address = $functions[$current];
