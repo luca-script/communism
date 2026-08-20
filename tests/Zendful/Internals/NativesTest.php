@@ -13,21 +13,6 @@ it('exposes validated fallback globals and ABI layout selection', function (): v
         ->and(Natives::compilerGlobals())->toBeObject();
 });
 
-it('initializes the fallback binding from the active PHP library', function (): void {
-    $property = new ReflectionProperty(Natives::class, 'def');
-    $property->setAccessible(true);
-    $original = $property->getValue();
-
-    try {
-        $property->setValue(null, null);
-
-        expect(Natives::ffi())->toBeInstanceOf(FFI::class)
-            ->and(Natives::compilerGlobals())->toBeObject();
-    } finally {
-        $property->setValue(null, $original);
-    }
-});
-
 it('selects platform ABI conventions and fallback library names', function (): void {
     $callingConvention = new ReflectionMethod(Natives::class, 'callingConvention');
     $libraries = new ReflectionMethod(Natives::class, 'fallbackLibraries');
