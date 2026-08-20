@@ -449,6 +449,7 @@ class Natives
     private static ?FFI $def = null;
     private static ?string $library = null;
     private static ?FFI $flf = null;
+    private static bool $flfShutdownRegistered = false;
 
     /**
      * @return FFI
@@ -958,10 +959,23 @@ EOF . (ZEND_THREAD_SAFE
         // can crash while destroying a path-backed extern pointer declaration
         // during request shutdown, so this uses the already-loaded process
         // module and is created once per process.
-        self::$flf ??= FFI::cdef(
-            'typedef unsigned long long zendful_uintptr; extern zendful_uintptr *zend_flf_functions;',
-            $library,
-        );
+        if (!(self::$flf instanceof FFI)) {
+            self::$flf = FFI::cdef(
+                'typedef unsigned long long zendful_uintptr; extern zendful_uintptr *zend_flf_functions;',
+                $library,
+            );
+
+            // PHP frees zend_flf_functions during Zend shutdown. Release the
+            // FFI binding during user shutdown first, while that symbol is
+            // still valid. This is required by PHP 8.6 TS on Windows, whose
+            // FFI destructor otherwise dereferences the released extern.
+            if (!self::$flfShutdownRegistered) {
+                self::$flfShutdownRegistered = true;
+                register_shutdown_function(static function (): void {
+                    self::$flf = null;
+                });
+            }
+        }
         $functions = self::$flf->zend_flf_functions;
         $address = null;
         for ($current = 0; ; $current++) {
