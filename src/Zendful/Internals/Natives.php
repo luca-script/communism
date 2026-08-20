@@ -448,6 +448,7 @@ class Natives
     // END OF EXTERNAL COPYRIGHT
     private static ?FFI $def = null;
     private static ?string $library = null;
+    private static ?FFI $flf = null;
 
     /**
      * @return FFI
