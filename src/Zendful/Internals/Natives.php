@@ -968,7 +968,7 @@ EOF . (ZEND_THREAD_SAFE
         // Keep the extern scalar-only. Casting its value here avoids making
         // the FFI scope own a nested pointer type, which PHP 8.6 TS can
         // corrupt while destroying the scope on Windows.
-        $functions = FFI::cast('zendful_uintptr *', self::$flf->zend_flf_functions);
+        $functions = self::$flf->cast('zendful_uintptr *', self::$flf->zend_flf_functions);
         $address = null;
         for ($current = 0; ; $current++) {
             $address = $functions[$current];
