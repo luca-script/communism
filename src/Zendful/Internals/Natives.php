@@ -967,13 +967,7 @@ EOF . (ZEND_THREAD_SAFE
             );
 
         }
-        // Extract the scalar value before casting. Passing the scalar CData
-        // object itself makes FFI::cast() treat its storage as the pointer
-        // target; that storage is temporary and becomes invalid at shutdown.
-        $functionAddress = self::$flf->zend_flf_functions->cdata;
-        if (!is_int($functionAddress) || $functionAddress === 0) {
-            return null;
-        }
+        $functionAddress = self::$flf->zend_flf_functions;
         $functions = self::$flf->cast('zendful_uintptr *', $functionAddress);
         $address = null;
         for ($current = 0; ; $current++) {
