@@ -107,20 +107,20 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
 
-      - name: Run Zendful coverage with crash diagnostics (Linux)
+      - name: Run Zendful coverage (Linux)
         if: matrix.os.name == 'Linux'
         shell: bash
-        run: bash tools/crash-diagnostics/run.sh coverage.php zendful
+        run: php coverage.php zendful
 
       - name: Run Zendful coverage with crash diagnostics (Windows)
         if: matrix.os.name == 'Windows'
         shell: pwsh
         run: ./tools/crash-diagnostics/run.ps1 coverage.php zendful
 
-      - name: Run Communism coverage with crash diagnostics (Linux)
+      - name: Run Communism coverage (Linux)
         if: matrix.os.name == 'Linux'
         shell: bash
-        run: bash tools/crash-diagnostics/run.sh coverage.php communism
+        run: php coverage.php communism
 
       - name: Run Communism coverage with crash diagnostics (Windows)
         if: matrix.os.name == 'Windows'
