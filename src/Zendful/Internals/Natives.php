@@ -967,12 +967,13 @@ EOF . (ZEND_THREAD_SAFE
             );
 
         }
-        // Keep the source CData alive while the cast pointer is in use. The
-        // FFI cast retains the source storage, not the source CData object;
-        // passing the extern field expression directly would leave a pointer
-        // into a temporary CData object after that expression is destroyed.
-        // Declare the source first so PHP destroys the pointer before it.
-        $functionAddress = self::$flf->zend_flf_functions;
+        // Extract the scalar value before casting. Passing the scalar CData
+        // object itself makes FFI::cast() treat its storage as the pointer
+        // target; that storage is temporary and becomes invalid at shutdown.
+        $functionAddress = self::$flf->zend_flf_functions->cdata;
+        if (!is_int($functionAddress) || $functionAddress === 0) {
+            return null;
+        }
         $functions = self::$flf->cast('zendful_uintptr *', $functionAddress);
         $address = null;
         for ($current = 0; ; $current++) {
