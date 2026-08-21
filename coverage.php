@@ -32,8 +32,8 @@ if ($extensionDirectory === false) {
 }
 
 $extensionNames = PHP_OS_FAMILY === 'Windows'
-    ? ['ffi' => ['php_ffi.dll', 'ffi.dll'], 'xml' => ['php_xml.dll', 'xml.dll'], 'dom' => ['php_dom.dll', 'dom.dll'], 'mbstring' => ['php_mbstring.dll', 'mbstring.dll'], 'opcache' => ['php_opcache.dll', 'opcache.dll'], 'pcov' => ['php_pcov.dll', 'pcov.dll']]
-    : ['ffi' => ['ffi.so'], 'xml' => ['xml.so'], 'dom' => ['dom.so'], 'mbstring' => ['mbstring.so'], 'opcache' => ['opcache.so'], 'pcov' => ['pcov.so']];
+    ? ['ffi' => ['php_ffi.dll', 'ffi.dll'], 'xml' => ['php_xml.dll', 'xml.dll'], 'dom' => ['php_dom.dll', 'dom.dll'], 'mbstring' => ['php_mbstring.dll', 'mbstring.dll'], 'tokenizer' => ['php_tokenizer.dll', 'tokenizer.dll'], 'opcache' => ['php_opcache.dll', 'opcache.dll'], 'pcov' => ['php_pcov.dll', 'pcov.dll']]
+    : ['ffi' => ['ffi.so'], 'xml' => ['xml.so'], 'dom' => ['dom.so'], 'mbstring' => ['mbstring.so'], 'tokenizer' => ['tokenizer.so'], 'opcache' => ['opcache.so'], 'pcov' => ['pcov.so']];
 
 $extensions = [];
 $zendExtensions = [];
