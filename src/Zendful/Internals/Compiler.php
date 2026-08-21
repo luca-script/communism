@@ -87,8 +87,11 @@ final class Compiler
             $arenaAddress = $originalArena === null
                 ? 0
                 : $ffi->cast('uintptr_t', $originalArena)->cdata;
-            $checkpointAddress = $arenaAddress !== 0 && ($arenaAddress & 7) === 0
-                ? unpack('P', FFI::string($ffi->cast('char *', $originalArena), PHP_INT_SIZE))[1]
+            $checkpointBytes = $arenaAddress !== 0 && ($arenaAddress & 7) === 0
+                ? unpack('P', FFI::string($ffi->cast('char *', $originalArena), PHP_INT_SIZE))
+                : false;
+            $checkpointAddress = is_array($checkpointBytes) && isset($checkpointBytes[1]) && is_int($checkpointBytes[1])
+                ? $checkpointBytes[1]
                 : null;
             $checkpoint = $checkpointAddress !== null && ($checkpointAddress & 7) === 0
                 ? $checkpointAddress

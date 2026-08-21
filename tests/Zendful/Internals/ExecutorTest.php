@@ -581,8 +581,10 @@ it('formats object and resource constants without dereferencing them', function 
     $ffi = Natives::ffi();
     $operandMethod = new ReflectionMethod(ZendfulExecutor::class, 'operand');
     $operandMethod->setAccessible(true);
+    /** @var \Zendful_FFI\zend_op_array $opArray */
     $opArray = $ffi->new('zend_op_array');
     $opline = $ffi->new('zend_op');
+    $opArray->opcodes = $ffi->cast('zend_op *', FFI::addr($opline));
 
     foreach ([Natives::ZEND_TYPE_OBJECT => 'OBJECT', Natives::ZEND_TYPE_RESOURCE => 'RESOURCE'] as $type => $description) {
         $literal = $ffi->new('zval');
@@ -597,6 +599,7 @@ it('formats object and resource constants without dereferencing them', function 
             null,
             $ffi,
             $opArray,
+            0,
             $opline,
             Natives::ZEND_IS_CONST,
             $rawOperand,
@@ -610,8 +613,10 @@ it('formats scalar constants through opcode operand metadata', function (): void
     $ffi = Natives::ffi();
     $operandMethod = new ReflectionMethod(ZendfulExecutor::class, 'operand');
     $operandMethod->setAccessible(true);
+    /** @var \Zendful_FFI\zend_op_array $opArray */
     $opArray = $ffi->new('zend_op_array');
     $opline = $ffi->new('zend_op');
+    $opArray->opcodes = $ffi->cast('zend_op *', FFI::addr($opline));
 
     foreach ([
         Natives::ZEND_TYPE_NULL => 'NULL',
@@ -634,7 +639,7 @@ it('formats scalar constants through opcode operand metadata', function (): void
         $rawOperand->constant = $offset;
 
         /** @var \Zendful\OperandHandle $result */
-        $result = $operandMethod->invoke(null, $ffi, $opArray, $opline, Natives::ZEND_IS_CONST, $rawOperand);
+        $result = $operandMethod->invoke(null, $ffi, $opArray, 0, $opline, Natives::ZEND_IS_CONST, $rawOperand);
 
         expect($result->constantDescription())->toContain($description);
     }

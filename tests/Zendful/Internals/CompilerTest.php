@@ -154,16 +154,17 @@ it('restores an unchanged compiler arena checkpoint without freeing it', functio
     $arena = $ffi->new('zend_arena');
     $arenaPointer = FFI::addr($arena);
     $checkpoint = $ffi->cast('char *', $arenaPointer);
+    $checkpointAddress = $ffi->cast('uintptr_t', $checkpoint)->cdata;
     $globals = new stdClass();
     $globals->arena = $arenaPointer;
 
     $releaseArena = new ReflectionMethod(ZendfulCompiler::class, 'releaseArena');
     $releaseArena->setAccessible(true);
 
-    $releaseArena->invoke(null, $globals, $arenaPointer, $checkpoint, $ffi);
+    $releaseArena->invoke(null, $globals, $arenaPointer, $checkpointAddress, $ffi);
 
     expect($globals->arena)->toBe($arenaPointer)
-        ->and($arena->ptr)->toEqual($checkpoint);
+        ->and($arena->ptr)->toEqual($ffi->cast('char *', $checkpointAddress));
 });
 
 it('reports the first hash-table cleanup failure for either declaration table', function (): void {
