@@ -53,6 +53,12 @@ foreach ($extensionNames as $name => $filenames) {
         }
     }
 
+    // Linux distributions may compile OPcache into the CLI binary instead
+    // of shipping an opcache.so file. It is optional for PCOV coverage.
+    if ($name === 'opcache' && !isset($zendExtensions[$name])) {
+        continue;
+    }
+
     if (!isset($extensions[$name]) && !isset($zendExtensions[$name])) {
         fwrite(STDERR, sprintf("The %s PHP extension was not found in %s.\n", $name, $extensionDirectory));
         exit(1);
