@@ -203,6 +203,8 @@ final class FindLoadedLibrary
                 $hasModule = $ffi->moduleFirst($snapshot, $module);
 
                 while ($hasModule) {
+                    // Convert both fields while the MODULEENTRY32A value is
+                    // alive; callers retain PHP strings, never FFI views.
                     $name = $ffi->moduleName($module);
                     if (1 === preg_match('/^php.*\.dll$/i', $name)) {
                         $path = $ffi->modulePath($module);
@@ -210,6 +212,10 @@ final class FindLoadedLibrary
                     }
 
                     $hasModule = $ffi->moduleNext($snapshot, $module);
+                }
+
+                if ([] === $libraries && $ffi instanceof NativeWindowsFfi) {
+                    $libraries = $ffi->phpModulePaths();
                 }
 
                 return array_values(array_unique($libraries));

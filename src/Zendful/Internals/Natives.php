@@ -449,7 +449,8 @@ class Natives
     // END OF EXTERNAL COPYRIGHT
     private static ?FFI $def = null;
     private static ?string $library = null;
-    private static ?FFI $flf = null;
+    /** @var list<string|null>|null */
+    private static ?array $framelessFunctionNames = null;
 
     /**
      * @return FFI
@@ -954,43 +955,41 @@ EOF . (ZEND_THREAD_SAFE
             return null;
         }
 
+        if (self::$framelessFunctionNames !== null) {
+            return self::$framelessFunctionNames[$index] ?? null;
+        }
+
         $library = self::$library;
 
-        // Keep this binding scalar-only. PHP 8.6's Windows TS FFI extension
-        // can crash while destroying a path-backed extern pointer declaration
-        // during request shutdown, so this uses the already-loaded process
-        // module and is created once per process.
-        if (!(self::$flf instanceof FFI)) {
-            self::$flf = FFI::cdef(
-                'typedef unsigned long long zendful_uintptr; extern zendful_uintptr zend_flf_functions;',
-                $library,
-            );
+        // Read Zend's pointer table once, copy the names into PHP strings,
+        // and release every FFI view before Zend shutdown can free the table.
+        $flf = FFI::cdef(
+            'typedef unsigned long long zendful_uintptr;'
+            . 'extern zendful_uintptr zend_flf_functions;',
+            $library,
+        );
+        $names = [];
+        $functionAddress = $flf->zend_flf_functions;
+        if (0 !== $functionAddress) {
+            $functions = $flf->cast('zendful_uintptr *', $functionAddress);
+            for ($current = 0; $current < 4096; $current++) {
+                $address = $functions[$current];
+                if ($address === 0) {
+                    break;
+                }
 
-        }
-        $functionAddress = self::$flf->zend_flf_functions;
-        $functions = self::$flf->cast('zendful_uintptr *', $functionAddress);
-        $address = null;
-        for ($current = 0; ; $current++) {
-            $address = $functions[$current];
-            if ($address === 0) {
-                break;
+                $function = self::def()->cast('zend_function *', $address);
+                $name = $function->function_name;
+                $names[] = $name === null || FFI::isNull($name)
+                    ? null
+                    : self::zendString($name);
             }
-            if ($current === $index) {
-                break;
-            }
         }
 
-        if ($address === null || $address === 0) {
-            return null;
-        }
+        unset($functionAddress, $functions, $function, $name, $flf);
+        self::$framelessFunctionNames = $names;
 
-        $function = self::def()->cast('zend_function *', $address);
-        $name = $function->function_name;
-        if ($name === null || FFI::isNull($name)) {
-            return null;
-        }
-
-        return self::zendString($name);
+        return self::$framelessFunctionNames[$index] ?? null;
     }
 
     /** @param \Zendful_FFI\zend_string $string */

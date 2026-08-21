@@ -22,6 +22,8 @@ namespace Zendful_FFI {
         public function Module32First(object $snapshot, object $module): int;
         public function Module32Next(object $snapshot, object $module): int;
         public function CloseHandle(object $snapshot): int;
+        public function GetModuleHandleA(string $moduleName): object;
+        public function GetModuleFileNameA(object $module, object $buffer, int $size): int;
         public function new(string $type): object;
     }
 
@@ -513,6 +515,8 @@ namespace {
      * @method int Module32First(object $snapshot, object $module)
      * @method int Module32Next(object $snapshot, object $module)
      * @method bool CloseHandle(object $handle)
+     * @method object GetModuleHandleA(string $moduleName)
+     * @method int GetModuleFileNameA(object $module, object $buffer, int $size)
      * @method int dl_iterate_phdr(callable $callback, object|null $data)
      * @method object|null dlopen(string $filename, int $flags)
      * @method int dlclose(object $handle)

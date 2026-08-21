@@ -37,6 +37,7 @@ class NativeWindowsFfi implements WindowsFfi
 typedef unsigned long DWORD;
 typedef int BOOL;
 typedef void *HANDLE;
+typedef void *HMODULE;
 typedef struct {
     DWORD dwSize;
     DWORD th32ModuleID;
@@ -53,6 +54,8 @@ HANDLE CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID);
 BOOL Module32First(HANDLE hSnapshot, MODULEENTRY32A *lpme);
 BOOL Module32Next(HANDLE hSnapshot, MODULEENTRY32A *lpme);
 BOOL CloseHandle(HANDLE hObject);
+HMODULE GetModuleHandleA(const char *lpModuleName);
+DWORD GetModuleFileNameA(HMODULE hModule, char *lpFilename, DWORD nSize);
 CDEF, 'kernel32.dll');
     }
 
@@ -121,6 +124,36 @@ CDEF, 'kernel32.dll');
         $ffi = $this->ffi;
         $ffi->CloseHandle($snapshot);
     }
+
+    /** @return list<string> */
+    public function phpModulePaths(): array
+    {
+        /** @var \Zendful_FFI\WindowsApi $ffi */
+        $ffi = $this->ffi;
+        $paths = [];
+
+        foreach (['php8ts.dll', 'php8.dll', 'php.dll'] as $moduleName) {
+            $module = $ffi->GetModuleHandleA($moduleName);
+            if ($this->ffiIsNull($module)) {
+                continue;
+            }
+
+            /** @var object $buffer */
+            $buffer = $ffi->new('char[32768]');
+            $length = $ffi->GetModuleFileNameA($module, $buffer, 32768);
+            if (0 === $length) {
+                continue;
+            }
+
+            $path = $this->string($buffer);
+            if ('' !== $path) {
+                $paths[] = $path;
+            }
+        }
+
+        return array_values(array_unique($paths));
+    }
+
     protected function cdef(string $code, ?string $library = null): object
     {
         return \FFI::cdef($code, $library);
