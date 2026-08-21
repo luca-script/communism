@@ -87,6 +87,7 @@ class Natives
     public const ZEND_TYPE_OBJECT = 8;
     public const ZEND_TYPE_RESOURCE = 9;
     public const ZEND_TYPE_CONSTANT_AST = 11;
+    public const ZEND_TYPE_PTR = 13;
 
     /**
      * Applies to: everything
@@ -707,6 +708,7 @@ typedef struct _zend_oparray_context {
     zend_string *active_property_info_name;
     int active_property_hook_kind;
     bool in_jmp_frameless_branch;
+    bool in_finally;
     bool has_assigned_to_http_response_header;
 } zend_oparray_context;
 typedef struct _zend_file_context {

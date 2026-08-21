@@ -1444,9 +1444,9 @@ final class Executor
             'name' => $ffi->zend_get_opcode_name($opline->opcode) ?? '',
             'extendedValue' => $opline->extended_value,
             'line' => $opline->lineno,
-            'result' => self::operand($ffi, $opArrayNative, $opline, $opline->result_type, $opline->result),
-            'operand1' => self::operand($ffi, $opArrayNative, $opline, $opline->op1_type, $opline->op1),
-            'operand2' => self::operand($ffi, $opArrayNative, $opline, $opline->op2_type, $opline->op2),
+            'result' => self::operand($ffi, $opArrayNative, $index, $opline, $opline->result_type, $opline->result),
+            'operand1' => self::operand($ffi, $opArrayNative, $index, $opline, $opline->op1_type, $opline->op1),
+            'operand2' => self::operand($ffi, $opArrayNative, $index, $opline, $opline->op2_type, $opline->op2),
         ]);
     }
 
@@ -1474,9 +1474,9 @@ final class Executor
                 'name' => $ffi->zend_get_opcode_name($opline->opcode) ?? '',
                 'extendedValue' => $opline->extended_value,
                 'line' => $opline->lineno,
-                'result' => self::operand($ffi, $opArray, $opline, $opline->result_type, $opline->result),
-                'operand1' => self::operand($ffi, $opArray, $opline, $opline->op1_type, $opline->op1),
-                'operand2' => self::operand($ffi, $opArray, $opline, $opline->op2_type, $opline->op2),
+                'result' => self::operand($ffi, $opArray, $index, $opline, $opline->result_type, $opline->result),
+                'operand1' => self::operand($ffi, $opArray, $index, $opline, $opline->op1_type, $opline->op1),
+                'operand2' => self::operand($ffi, $opArray, $index, $opline, $opline->op2_type, $opline->op2),
             ]);
         }
 
@@ -1660,14 +1660,15 @@ final class Executor
      * @phpstan-param \Zendful_FFI\zend_op $opline
      * @phpstan-param \Zendful_FFI\znode_op $operand
      */
-    private static function operand(FFI $ffi, object $opArray, object $opline, int $type, object $operand): OperandHandle
+    private static function operand(FFI $ffi, object $opArray, int $index, object $opline, int $type, object $operand): OperandHandle
     {
         $constantDescription = '';
         $value = null;
         $literalIndex = null;
         if ($type === Natives::ZEND_IS_CONST) {
-            $oplineAddress = $ffi->cast('char *', FFI::addr($opline));
-            $literalAddress = $ffi->cast('uintptr_t', $oplineAddress)->cdata + $operand->constant;
+            $opcodesAddress = $ffi->cast('uintptr_t', $opArray->opcodes)->cdata;
+            $oplineAddress = $opcodesAddress + $index * FFI::sizeof($ffi->new('zend_op'));
+            $literalAddress = $oplineAddress + $operand->constant;
             $literal = $ffi->cast('zval *', $ffi->cast('char *', $literalAddress))[0];
             $literalType = $literal->u1->v->type;
             $value = self::constantValue($ffi, $literal);

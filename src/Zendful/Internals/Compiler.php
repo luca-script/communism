@@ -84,7 +84,15 @@ final class Compiler
             $classTable = $globals->class_table;
             $functionTable = $globals->function_table;
             $originalArena = $globals->arena;
-            $checkpoint = $originalArena?->ptr;
+            $arenaAddress = $originalArena === null
+                ? 0
+                : $ffi->cast('uintptr_t', $originalArena)->cdata;
+            $checkpointAddress = $arenaAddress !== 0 && ($arenaAddress & 7) === 0
+                ? unpack('P', FFI::string($ffi->cast('char *', $originalArena), PHP_INT_SIZE))[1]
+                : null;
+            $checkpoint = $checkpointAddress !== null && ($checkpointAddress & 7) === 0
+                ? $checkpointAddress
+                : null;
             $originalClasses = self::keys($classTable, $ffi);
             $originalFunctions = self::keys($functionTable, $ffi);
             $globals->compiler_options = $options
@@ -256,6 +264,9 @@ final class Compiler
         for ($index = 0; $index < $table->nNumUsed; $index++) {
             $bucket = $table->arData[$index];
             $key = $bucket->key;
+            if ($bucket->val->u1->v->type !== Natives::ZEND_TYPE_PTR) {
+                continue;
+            }
             $pointer = $bucket->val->value->ptr;
             if ($pointer === null || FFI::isNull($pointer) || $key === null) {
                 continue;
@@ -356,7 +367,7 @@ final class Compiler
         ?object $functionTable,
         array $functionKeys,
         ?object $originalArena,
-        ?object $checkpoint,
+        ?int $checkpoint,
     ): ?Throwable {
         $failure = null;
         if ($globals !== null && $options !== null) {
@@ -437,9 +448,9 @@ final class Compiler
     /**
      * @phpstan-param \Zendful_FFI\zend_compiler_globals $globals
      * @phpstan-param \Zendful_FFI\zend_arena|null $original
-     * @phpstan-param object|null $checkpoint
+     * @phpstan-param int|null $checkpoint
      */
-    private static function releaseArena(object $globals, ?object $original, ?object $checkpoint, FFI $ffi): void
+    private static function releaseArena(object $globals, ?object $original, ?int $checkpoint, FFI $ffi): void
     {
         if ($original === null || $checkpoint === null) {
             return;
@@ -455,7 +466,7 @@ final class Compiler
         }
 
         if ($arena !== null) {
-            $arena->ptr = $checkpoint;
+            $arena->ptr = $ffi->cast('char *', $checkpoint);
             $globals->arena = $arena;
         }
         // @codeCoverageIgnoreEnd
