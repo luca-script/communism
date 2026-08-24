@@ -180,6 +180,10 @@ jobs:
             }
             $installed = $true
 
+            Write-Host 'ProcDump installation succeeded; registered AeDebug entries:'
+            & reg.exe query 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug' /s
+            & reg.exe query 'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug' /s
+
             & composer run-script "test:${{ matrix.suite }}"
             if ($LASTEXITCODE -ne 0) {
                 exit $LASTEXITCODE
@@ -196,11 +200,14 @@ jobs:
       shell: pwsh
       run: |
         $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
+        Write-Host 'Windows crash-dump directory contents:'
+        Get-ChildItem -LiteralPath $dumpDirectory -Force -ErrorAction SilentlyContinue |
+            Select-Object FullName, Length, LastWriteTime
         $dump = Get-ChildItem -LiteralPath $dumpDirectory -Filter '*.dmp' -File -ErrorAction SilentlyContinue | Select-Object -First 1
         "found=$([bool]$dump)" | Add-Content -Path $env:GITHUB_OUTPUT
 
     - name: Collect PHP debug files (Windows)
-      if: failure() && matrix.os.name == 'Windows' && steps.php-crash.outputs.found == 'true'
+      if: failure() && matrix.os.name == 'Windows'
       shell: pwsh
       run: |
         $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
@@ -215,7 +222,7 @@ jobs:
             Copy-Item -Destination $symbols -Force
 
     - name: Upload PHP crash dumps (Windows)
-      if: failure() && matrix.os.name == 'Windows' && steps.php-crash.outputs.found == 'true'
+      if: failure() && matrix.os.name == 'Windows'
       uses: actions/upload-artifact@v7
       with:
         name: php-crash-dumps-${{ matrix.php.name }}-${{ matrix.suite }}
