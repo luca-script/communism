@@ -165,6 +165,7 @@ jobs:
         $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
         $procdump = Join-Path $env:RUNNER_TEMP 'procdump\procdump.exe'
         $installed = $false
+        $testExitCode = 0
         try {
             # Install ProcDump as Windows' postmortem debugger. This catches
             # crashes in PHPStan and any other child process without needing
@@ -185,11 +186,33 @@ jobs:
             & reg.exe query 'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug' /s
 
             & composer run-script "test:${{ matrix.suite }}"
+            $testExitCode = $LASTEXITCODE
             if ($LASTEXITCODE -ne 0) {
                 exit $LASTEXITCODE
             }
         } finally {
             if ($installed) {
+                if ($testExitCode -ne 0) {
+                    # AeDebug starts ProcDump after the crashing process has
+                    # terminated. Wait for it to finish writing before
+                    # unregistering ProcDump and moving to artifact steps.
+                    $deadline = (Get-Date).AddSeconds(360)
+                    $previousLength = -1L
+                    do {
+                        $dump = Get-ChildItem -LiteralPath $dumpDirectory -Filter '*.dmp' -File -ErrorAction SilentlyContinue |
+                            Select-Object -First 1
+                        if ($null -ne $dump) {
+                            Start-Sleep -Seconds 1
+                            $currentLength = (Get-Item -LiteralPath $dump.FullName).Length
+                            if ($currentLength -eq $previousLength) {
+                                break
+                            }
+                            $previousLength = $currentLength
+                        } else {
+                            Start-Sleep -Milliseconds 500
+                        }
+                    } while ((Get-Date) -lt $deadline)
+                }
                 & $procdump '-u' | Out-Host
             }
         }
@@ -207,7 +230,7 @@ jobs:
         "found=$([bool]$dump)" | Add-Content -Path $env:GITHUB_OUTPUT
 
     - name: Collect PHP debug files (Windows)
-      if: failure() && matrix.os.name == 'Windows'
+      if: failure() && matrix.os.name == 'Windows' && steps.php-crash.outputs.found == 'true'
       shell: pwsh
       run: |
         $dumpDirectory = Join-Path $env:RUNNER_TEMP 'php-crash-dumps'
@@ -222,7 +245,7 @@ jobs:
             Copy-Item -Destination $symbols -Force
 
     - name: Upload PHP crash dumps (Windows)
-      if: failure() && matrix.os.name == 'Windows'
+      if: failure() && matrix.os.name == 'Windows' && steps.php-crash.outputs.found == 'true'
       uses: actions/upload-artifact@v7
       with:
         name: php-crash-dumps-${{ matrix.php.name }}-${{ matrix.suite }}
