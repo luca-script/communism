@@ -166,6 +166,8 @@ jobs:
         $procdump = Join-Path $env:RUNNER_TEMP 'procdump\procdump.exe'
         $installed = $false
         $testExitCode = 0
+        $waitForDump = $false
+        $testLog = Join-Path $dumpDirectory 'test-output.log'
         try {
             # Install ProcDump as Windows' postmortem debugger. This catches
             # crashes in PHPStan and any other child process without needing
@@ -185,14 +187,16 @@ jobs:
             & reg.exe query 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug' /s
             & reg.exe query 'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug' /s
 
-            & composer run-script "test:${{ matrix.suite }}"
+            & composer run-script "test:${{ matrix.suite }}" 2>&1 |
+                Tee-Object -FilePath $testLog
             $testExitCode = $LASTEXITCODE
-            if ($LASTEXITCODE -ne 0) {
-                exit $LASTEXITCODE
+            $waitForDump = Select-String -LiteralPath $testLog -Pattern '-1073741819|Child process error \(exit code' -Quiet
+            if ($testExitCode -ne 0) {
+                exit $testExitCode
             }
         } finally {
             if ($installed) {
-                if ($testExitCode -ne 0) {
+                if ($waitForDump) {
                     # AeDebug starts ProcDump after the crashing process has
                     # terminated. Wait for it to finish writing before
                     # unregistering ProcDump and moving to artifact steps.
