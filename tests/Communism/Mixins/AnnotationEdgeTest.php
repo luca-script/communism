@@ -6,6 +6,7 @@ use Communism\Mixin\At;
 use Communism\Mixin\Group;
 use Communism\Mixin\Inject;
 use Communism\Mixin\Mixin;
+use Communism\Mixin\MixinConfiguration;
 use Communism\Mixin\ModifyVariable;
 
 it('validates At descriptions and action defaults', function (): void {
@@ -47,12 +48,32 @@ it('validates annotation constraints and mixin target matching', function (): vo
         ->and(static fn(): Inject => new Inject('m', $at, mode: 'invalid'))->toThrow(InvalidArgumentException::class)
         ->and(static fn(): ModifyVariable => new ModifyVariable('m', $at, index: -1))->toThrow(InvalidArgumentException::class)
         ->and(static fn(): ModifyVariable => new ModifyVariable('m', $at, require: -1))->toThrow(InvalidArgumentException::class)
+        ->and(static fn(): ModifyVariable => new ModifyVariable('m', $at, print: true, require: 1))->toThrow(InvalidArgumentException::class)
         ->and(static fn(): Mixin => new Mixin())->toThrow(InvalidArgumentException::class);
 
     $mixin = new Mixin('*', AnnotationEdgeTestTarget::class);
     expect($mixin->allows(AnnotationEdgeTestTarget::class))->toBeTrue()
         ->and($mixin->allows(AnnotationEdgeOtherTarget::class))->toBeTrue()
         ->and((new Mixin(AnnotationEdgeTestTarget::class))->allows(AnnotationEdgeOtherTarget::class))->toBeFalse();
+});
+
+it('orders declarative configurations deterministically and filters their context', function (): void {
+    $late = new MixinConfiguration('LateMixin', [AnnotationEdgeTestTarget::class], priority: 20);
+    $early = new MixinConfiguration('EarlyMixin', [AnnotationEdgeTestTarget::class], priority: 10);
+    $tie = new MixinConfiguration('TieMixin', [AnnotationEdgeTestTarget::class], priority: 10);
+
+    expect(MixinConfiguration::ordered([$late, $early, $tie]))->toBe([$early, $tie, $late])
+        ->and($early->appliesTo(AnnotationEdgeTestTarget::class))->toBeTrue()
+        ->and($early->appliesTo(strtolower(AnnotationEdgeTestTarget::class)))->toBeTrue()
+        ->and($early->appliesTo(AnnotationEdgeOtherTarget::class))->toBeFalse()
+        ->and((new MixinConfiguration('EnvMixin', environment: 'test'))->appliesTo(AnnotationEdgeTestTarget::class, 'test'))->toBeTrue()
+        ->and((new MixinConfiguration('EnvMixin', environment: 'test'))->appliesTo(AnnotationEdgeTestTarget::class, 'prod'))->toBeFalse()
+        ->and((new MixinConfiguration('OptionalMixin', required: false, compatibilityVersion: '999.0'))->appliesTo(AnnotationEdgeTestTarget::class))->toBeFalse();
+
+    expect(static fn(): MixinConfiguration => new MixinConfiguration('', []))
+        ->toThrow(InvalidArgumentException::class, 'requires a mixin')
+        ->and(static fn(): array => MixinConfiguration::ordered(['invalid']))
+        ->toThrow(InvalidArgumentException::class, 'MixinConfiguration objects');
 });
 
 final class AnnotationEdgeTestTarget {}

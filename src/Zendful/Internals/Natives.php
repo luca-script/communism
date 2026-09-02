@@ -831,6 +831,7 @@ EOF
 . <<<'EOF'
 zend_string *zend_strpprintf(size_t max_len, const char *format, ...);
 zend_class_entry *zend_lookup_class(zend_string *name);
+void zend_class_implements(zend_class_entry *class_entry, int num_interfaces, ...);
 void zend_class_init_statics(zend_class_entry *class_type);
 
 EOF

@@ -105,3 +105,59 @@ it('rejects INVOKE_ASSIGN when the invocation result is not assigned', function 
 
     expect((new InvokeAssignMissingTarget())->run('needle'))->toBe('NEEDLE');
 });
+
+#[Mixin(InvokeAssignQuantifierTarget::class)]
+final class InvokeAssignQuantifierMixin
+{
+    private function __construct() {}
+
+    #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue{1}'))]
+    public function captureFirstAssignment(CallbackInfo $info, string $result): void
+    {
+        $GLOBALS['invoke_assign_captured'] = $result;
+    }
+}
+
+final class InvokeAssignQuantifierTarget
+{
+    public function run(string $first, string $second): string
+    {
+        $firstResult = invokeAssignValue($first);
+        $secondResult = invokeAssignValue($second);
+
+        return $firstResult . ':' . $secondResult;
+    }
+}
+
+it('limits invocation matches with a selector quantifier', function (): void {
+    unset($GLOBALS['invoke_assign_captured']);
+    (new ReflectionClass(InvokeAssignQuantifierTarget::class))->inject(InvokeAssignQuantifierMixin::class);
+
+    expect((new InvokeAssignQuantifierTarget())->run('first', 'second'))->toBe('FIRST:SECOND')
+        ->and(invokeAssignCaptured())->toBe('first');
+});
+
+#[Mixin(InvokeAssignQuantifierMissingTarget::class)]
+final class InvokeAssignQuantifierMissingMixin
+{
+    private function __construct() {}
+
+    #[Inject('run', new At('INVOKE', 'invokeAssignValue{3}'))]
+    public function neverRuns(): void {}
+}
+
+final class InvokeAssignQuantifierMissingTarget
+{
+    public function run(string $value): string
+    {
+        return invokeAssignValue($value);
+    }
+}
+
+it('rejects invocation selectors outside their quantifier bounds before mutation', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(InvokeAssignQuantifierMissingTarget::class))->inject(InvokeAssignQuantifierMissingMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'outside its quantifier bounds');
+
+    expect((new InvokeAssignQuantifierMissingTarget())->run('needle'))->toBe('NEEDLE');
+});

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Communism\Mixin\At;
+use Communism\Mixin\CallbackInjectionException;
 use Communism\Mixin\CallbackInfo;
 use Communism\Mixin\Inject;
 use Communism\Mixin\LocalCapture;
@@ -77,10 +78,18 @@ it('skips a callback when FAILSOFT cannot capture a local', function (): void {
 });
 
 it('fails before mutation when CAPTURE_FAILHARD cannot capture a local', function (): void {
-    expect(function (): never {
+    try {
         (new Communism\Reflect\ReflectionClass(LocalCaptureHardTarget::class))->inject(LocalCaptureHardMixin::class);
         throw new \RuntimeException('Hard local capture unexpectedly succeeded');
-    })->toThrow(\InvalidArgumentException::class, 'cannot be captured');
+    } catch (CallbackInjectionException $exception) {
+        expect($exception->point)->toBe('HEAD')
+            ->and($exception->targetMethod)->toBe('LocalCaptureHardTarget::greet')
+            ->and($exception->handlerMethod)->toBe('LocalCaptureHardMixin::hardCallback')
+            ->and($exception->start)->toBe(0)
+            ->and($exception->end)->toBe(0)
+            ->and($exception->getPrevious())->toBeInstanceOf(\InvalidArgumentException::class)
+            ->and($exception->getMessage())->toContain('cannot be captured');
+    }
 
     expect((new LocalCaptureHardTarget())->greet())->toBe('original')
         ->and(in_array('hardCallback', get_class_methods(LocalCaptureHardTarget::class), true))->toBeFalse();

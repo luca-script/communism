@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Communism\Mixin\Accessor;
 use Communism\Mixin\Invoker;
 use Communism\Mixin\Mixin;
+use Communism\Internals\Needle\Decompiler;
 
 #[Mixin(AccessorTarget::class)]
 final class AccessorMixin
@@ -91,6 +92,44 @@ final class StaticAccessorTarget
     }
 }
 
+#[Mixin(MultipleAccessorTarget::class)]
+final class MultipleAccessorMixin
+{
+    private function __construct() {}
+
+    #[Accessor('first')]
+    public function first(): string
+    {
+        throw new \LogicException('Mixin accessor stub');
+    }
+
+    #[Accessor('second')]
+    public function second(): string
+    {
+        throw new \LogicException('Mixin accessor stub');
+    }
+}
+
+/**
+ * @method string first()
+ * @method string second()
+ */
+final class MultipleAccessorTarget
+{
+    private string $first = 'first';
+    private string $second = 'second';
+
+    public function firstValue(): string
+    {
+        return $this->first;
+    }
+
+    public function secondValue(): string
+    {
+        return $this->second;
+    }
+}
+
 
 final class MissingAccessorTarget {}
 
@@ -127,6 +166,10 @@ it('generates instance accessors and private method invokers', function (): void
     expect($target->getSecret())->toBe('hidden')
         ->and($target->callWhisper('value: '))->toBe('value: hidden');
 
+    $accessorOpcodes = array_column(Decompiler::decompile(AccessorTarget::class . '::getSecret')->instructions(), 'name');
+    expect($accessorOpcodes)->toContain('FETCH_OBJ_R');
+    expect(in_array('INIT_STATIC_METHOD_CALL', $accessorOpcodes, true))->toBeFalse();
+
     $target->setSecret('changed');
     expect($target->getSecret())->toBe('changed')
         ->and($target->callWhisper('value: '))->toBe('value: changed');
@@ -138,6 +181,14 @@ it('generates static accessors and explicitly named invokers', function (): void
 
     expect(StaticAccessorTarget::getCount())->toBe(4)
         ->and(StaticAccessorTarget::callSum(6, 7))->toBe(13);
+});
+
+it('keeps separately generated accessors bound to their own members', function (): void {
+    (new Communism\Reflect\ReflectionClass(MultipleAccessorTarget::class))->inject(MultipleAccessorMixin::class);
+
+    $target = new MultipleAccessorTarget();
+    expect($target->first())->toBe('first')
+        ->and($target->second())->toBe('second');
 });
 
 it('rejects an accessor for a missing property before adding the method', function (): void {

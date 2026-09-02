@@ -42,6 +42,7 @@ final class Assembler
 {
     public static function write(MethodBody $body, OpArrayHandle $opArray): void
     {
+        Verifier::verify($body);
         [$literalSlots, $literalValues] = self::planLiterals($body, $opArray->literalCount());
         $instructions = [];
         foreach ($body->instructions() as $instruction) {

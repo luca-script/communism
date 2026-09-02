@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Communism\Mixin\At;
 use Communism\Mixin\Mixin;
 use Communism\Mixin\ModifyArg;
+use Communism\Mixin\Slice;
 use Communism\Reflect\ReflectionClass;
 
 function modifyArgTarget(int $value): int
@@ -95,4 +96,42 @@ it('rejects ModifyArg indexes that the invocation does not provide', function ()
     })->toThrow(InvalidArgumentException::class);
 
     expect((new InvalidModifyArgTarget())->value(4))->toBe(8);
+});
+
+function modifyArgSliceValue(int $value): int
+{
+    return $value * 2;
+}
+
+#[Mixin(ModifyArgSliceTarget::class)]
+final class ModifyArgSliceMixin
+{
+    private function __construct() {}
+
+    #[ModifyArg(
+        'value',
+        new At('INVOKE', 'modifyArgSliceValue'),
+        slice: new Slice(
+            new At('INVOKE', 'modifyArgSliceValue', 0),
+            new At('INVOKE', 'modifyArgSliceValue', 1),
+        ),
+    )]
+    public function changeOnlyFirst(int $value): int
+    {
+        return $value + 1;
+    }
+}
+
+final class ModifyArgSliceTarget
+{
+    public function value(int $value): int
+    {
+        return modifyArgSliceValue($value) + modifyArgSliceValue($value);
+    }
+}
+
+it('applies ModifyArg only inside its declared slice', function (): void {
+    (new ReflectionClass(ModifyArgSliceTarget::class))->inject(ModifyArgSliceMixin::class);
+
+    expect((new ModifyArgSliceTarget())->value(4))->toBe(18);
 });

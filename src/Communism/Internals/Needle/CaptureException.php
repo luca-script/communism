@@ -30,4 +30,4 @@ namespace Communism\Internals\Needle;
 use InvalidArgumentException;
 
 /** @internal Identifies a callback-local capture failure. */
-final class CaptureException extends InvalidArgumentException {}
+class CaptureException extends InvalidArgumentException {}

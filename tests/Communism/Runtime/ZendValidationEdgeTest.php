@@ -3,12 +3,17 @@
 declare(strict_types=1);
 
 use Communism\Internals\Zend;
+use Communism\Internals\TransformationSnapshot;
 use Communism\Mixin\Accessor;
 use Communism\Mixin\At;
+use Communism\Mixin\Dynamic;
+use Communism\Mixin\DebugOptions;
 use Communism\Mixin\Final_;
 use Communism\Mixin\Group;
 use Communism\Mixin\Inject;
+use Communism\Mixin\Invoker;
 use Communism\Mixin\Mixin;
+use Communism\Mixin\MixinConfiguration;
 use Communism\Mixin\ModifyArg;
 use Communism\Mixin\ModifyArgs;
 use Communism\Mixin\ModifyConstant;
@@ -19,6 +24,7 @@ use Communism\Mixin\Shadow;
 use Communism\Mixin\Surrogate;
 use Communism\Mixin\Unique;
 use Communism\Mixin\Redirect;
+use Communism\Reflect\ReflectionClass;
 
 class ZendValidationTarget
 {
@@ -40,6 +46,19 @@ class ZendValidationTarget
     }
 }
 
+final class ZendValidationDebugTarget {}
+
+#[Mixin(ZendValidationDebugTarget::class)]
+final class ZendValidationDebugMixin
+{
+    private function __construct() {}
+
+    public function debugMarker(): string
+    {
+        return 'debug';
+    }
+}
+
 final class ZendValidationNoMixin
 {
     private function __construct() {}
@@ -53,6 +72,25 @@ final class ZendValidationInjectMissing
     #[Inject('missing', new At('HEAD'))]
     public function handler(): void {}
 }
+
+#[Mixin(ZendValidationTarget::class)]
+final class ZendValidationDynamicMissing
+{
+    private function __construct() {}
+
+    #[Dynamic('provided by an upstream transformation')]
+    #[Inject('missing', new At('HEAD'))]
+    public function handler(): void {}
+}
+
+it('reports Dynamic context when an annotated injection target is missing', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(ZendValidationTarget::class))->inject(ZendValidationDynamicMissing::class);
+    })->toThrow(InvalidArgumentException::class, 'dynamic: provided by an upstream transformation');
+
+    $attribute = (new ReflectionMethod(ZendValidationDynamicMissing::class, 'handler'))->getAttributes(Dynamic::class)[0] ?? null;
+    expect($attribute?->newInstance()->description())->toBe('provided by an upstream transformation');
+});
 
 #[Mixin(ZendValidationTarget::class)]
 final class ZendValidationUniqueCollision
@@ -130,7 +168,7 @@ final class ZendValidationAccessorInvoker
     private function __construct() {}
 
     #[Accessor]
-    #[\Communism\Mixin\Invoker]
+    #[Invoker]
     public function generated(): void {}
 }
 
@@ -236,6 +274,34 @@ final class ZendValidationMissingOverride
     #[Overwrite(method: 'missing')]
     public function replacement(): void {}
 }
+
+final class ZendValidationOverwriteSignatureTarget
+{
+    public function run(int $value): string
+    {
+        return (string) $value;
+    }
+}
+
+#[Mixin(ZendValidationOverwriteSignatureTarget::class)]
+final class ZendValidationOverwriteSignatureMismatch
+{
+    private function __construct() {}
+
+    #[Overwrite]
+    public function run(): string
+    {
+        return 'replacement';
+    }
+}
+
+it('rejects incompatible Overwrite signatures before mutation', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(ZendValidationOverwriteSignatureTarget::class))->inject(ZendValidationOverwriteSignatureMismatch::class);
+    })->toThrow(InvalidArgumentException::class, 'incompatible signature');
+
+    expect((new ZendValidationOverwriteSignatureTarget())->run(9))->toBe('9');
+});
 
 #[Mixin(ZendValidationTarget::class)]
 final class ZendValidationGeneratedCollision
@@ -463,4 +529,76 @@ it('handles unique collisions and mutable shadows', function (): void {
     Zend::injectMixinMethods(ZendValidationTarget::class, ZendValidationMutableShadow::class);
 
     expect(method_exists(ZendValidationTarget::class, '__unique_run_0'))->toBeTrue();
+});
+
+it('validates required declarative configurations before applying them', function (): void {
+    expect(static fn() => Zend::applyMixinConfigurations(
+        ZendValidationTarget::class,
+        [new MixinConfiguration('MissingOptionalMixin', required: false)],
+    ))->not->toThrow(InvalidArgumentException::class)
+        ->and(static fn() => Zend::applyMixinConfigurations(
+            ZendValidationTarget::class,
+            [new MixinConfiguration('MissingRequiredMixin')],
+        ))->toThrow(InvalidArgumentException::class, 'Required mixin MissingRequiredMixin is not declared');
+});
+
+it('applies debug options to export and strict configuration policy', function (): void {
+    $before = count(Zend::transformationSnapshots());
+    Zend::setDebugOptions(new DebugOptions(export: false));
+    try {
+        Zend::injectMixinMethods(ZendValidationDebugTarget::class, ZendValidationDebugMixin::class);
+        expect(count(Zend::transformationSnapshots()))->toBe($before)
+            ->and((new \ReflectionClass(ZendValidationDebugTarget::class))->hasMethod('debugMarker'))->toBeTrue();
+
+        Zend::setDebugOptions(new DebugOptions(strict: false));
+        expect(static fn() => Zend::applyMixinConfigurations(
+            ZendValidationTarget::class,
+            [new MixinConfiguration('MissingRequiredMixin')],
+        ))->not->toThrow(InvalidArgumentException::class);
+    } finally {
+        Zend::setDebugOptions(new DebugOptions());
+    }
+});
+
+#[Mixin('ZendValidationPreloadTarget')]
+final class ZendValidationPreloadMixin
+{
+    private function __construct() {}
+
+    public function preloadMarker(): string
+    {
+        return 'preloaded';
+    }
+}
+
+it('applies registered configurations after a target autoloads and rejects late registration', function (): void {
+    expect(static fn() => Zend::registerPreloadConfigurations([
+        new MixinConfiguration(ZendValidationPreloadMixin::class, [ZendValidationTarget::class]),
+    ]))->toThrow(InvalidArgumentException::class, 'already declared');
+
+    $autoload = static function (string $class): void {
+        if ($class === 'ZendValidationPreloadTarget') {
+            eval('class ZendValidationPreloadTarget {}');
+        }
+    };
+    spl_autoload_register($autoload);
+    try {
+        Zend::registerPreloadConfigurations([
+            new MixinConfiguration(ZendValidationPreloadMixin::class, ['ZendValidationPreloadTarget']),
+        ]);
+        $targetClass = 'ZendValidationPreloadTarget';
+        if (!class_exists($targetClass)) {
+            throw new RuntimeException('The preload target was not autoloaded');
+        }
+        $target = new $targetClass();
+        if (!is_object($target)) {
+            throw new RuntimeException('The preload target was not instantiated');
+        }
+        $targetReflection = new \ReflectionClass($target);
+        expect($targetReflection->hasMethod('preloadMarker'))->toBeTrue()
+            ->and($targetReflection->getMethod('preloadMarker')->invoke($target))->toBe('preloaded');
+    } finally {
+        Zend::clearPreloadConfigurations();
+        spl_autoload_unregister($autoload);
+    }
 });

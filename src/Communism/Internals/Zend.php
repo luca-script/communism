@@ -28,12 +28,19 @@ declare(strict_types=1);
 namespace Communism\Internals;
 
 use Communism\Mixin\Accessor;
+use Communism\Mixin\Applies;
 use Communism\Mixin\At;
+use Communism\Mixin\Dynamic;
+use Communism\Mixin\DebugOptions;
 use Communism\Mixin\Final_;
 use Communism\Mixin\Group;
 use Communism\Mixin\Inject;
+use Communism\Mixin\Implements_;
+use Communism\Mixin\Interface_;
+use Communism\Mixin\Intrinsic;
 use Communism\Mixin\Invoker;
 use Communism\Mixin\Mixin;
+use Communism\Mixin\MixinConfiguration;
 use Communism\Mixin\ModifyArg;
 use Communism\Mixin\ModifyArgs;
 use Communism\Mixin\ModifyConstant;
@@ -43,6 +50,7 @@ use Communism\Mixin\Overwrite;
 use Communism\Mixin\Pseudo;
 use Communism\Mixin\Redirect;
 use Communism\Mixin\Shadow;
+use Communism\Mixin\SoftOverride;
 use Communism\Mixin\Surrogate;
 use Communism\Mixin\Unique;
 use InvalidArgumentException;
@@ -57,6 +65,137 @@ use function sprintf;
  */
 final class Zend
 {
+    /** @var array<string, true> */
+    private static array $activeTransformations = [];
+
+    /** @var list<TransformationSnapshot> */
+    private static array $snapshots = [];
+
+    /** @var list<MixinConfiguration> */
+    private static array $preloadConfigurations = [];
+
+    private static bool $preloadRegistered = false;
+
+    private static DebugOptions $debugOptions;
+
+    public static function debugOptions(): DebugOptions
+    {
+        return self::$debugOptions ??= new DebugOptions();
+    }
+
+    public static function setDebugOptions(DebugOptions $options): void
+    {
+        self::$debugOptions = $options;
+    }
+
+    /** @return list<TransformationSnapshot> */
+    public static function transformationSnapshots(): array
+    {
+        return self::$snapshots;
+    }
+
+    public static function clearTransformationSnapshots(): void
+    {
+        self::$snapshots = [];
+    }
+
+    /**
+     * Apply declarative mixin configurations in stable ascending priority.
+     *
+     * @param list<MixinConfiguration> $configurations
+     */
+    public static function applyMixinConfigurations(string $className, array $configurations, ?string $environment = null): void
+    {
+        /** @var list<MixinConfiguration> $ordered */
+        $ordered = MixinConfiguration::ordered($configurations);
+        foreach ($ordered as $configuration) {
+            if (!$configuration->appliesTo($className, $environment)) {
+                if (self::debugOptions()->strict && $configuration->required
+                    && ($configuration->environment === null || $configuration->environment === $environment)) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Required mixin %s is incompatible with target %s or PHP %s',
+                        $configuration->mixin,
+                        $className,
+                        PHP_VERSION,
+                    ));
+                }
+                continue;
+            }
+            if (!class_exists($configuration->mixin)) {
+                if (self::debugOptions()->strict && $configuration->required) {
+                    throw new InvalidArgumentException(sprintf('Required mixin %s is not declared', $configuration->mixin));
+                }
+                continue;
+            }
+
+            self::injectMixinMethods($className, $configuration->mixin);
+        }
+    }
+
+    /**
+     * Register configurations to be applied immediately after autoloading a
+     * matching target class. Concrete targets must not already be declared.
+     *
+     * @param list<MixinConfiguration> $configurations
+     */
+    public static function registerPreloadConfigurations(array $configurations, ?string $environment = null): void
+    {
+        $ordered = MixinConfiguration::ordered($configurations);
+        foreach ($ordered as $configuration) {
+            if ($configuration->targets === []) {
+                throw new InvalidArgumentException('Preload configurations require at least one concrete target or "*"');
+            }
+            foreach ($configuration->targets as $target) {
+                if ($target !== '*' && class_exists($target, false)) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Cannot register preload mixin %s: target %s is already declared',
+                        $configuration->mixin,
+                        $target,
+                    ));
+                }
+            }
+        }
+
+        self::$preloadConfigurations = [...self::$preloadConfigurations, ...$ordered];
+        if (!self::$preloadRegistered) {
+            spl_autoload_register([self::class, 'autoloadPreloadTarget'], true, true);
+            self::$preloadRegistered = true;
+        }
+    }
+
+    public static function clearPreloadConfigurations(): void
+    {
+        self::$preloadConfigurations = [];
+        if (self::$preloadRegistered) {
+            spl_autoload_unregister([self::class, 'autoloadPreloadTarget']);
+            self::$preloadRegistered = false;
+        }
+    }
+
+    private static function autoloadPreloadTarget(string $className): void
+    {
+        foreach (spl_autoload_functions() as $autoloader) {
+            if ($autoloader === [self::class, 'autoloadPreloadTarget']) {
+                continue;
+            }
+            call_user_func($autoloader, $className);
+            if (class_exists($className, false)) {
+                break;
+            }
+        }
+        if (!class_exists($className, false)) {
+            return;
+        }
+
+        $configurations = array_values(array_filter(
+            self::$preloadConfigurations,
+            static fn(MixinConfiguration $configuration): bool => $configuration->appliesTo($className),
+        ));
+        if ($configurations !== []) {
+            self::applyMixinConfigurations($className, $configurations);
+        }
+    }
+
     /**
      * Inject selected methods from a non-instantiable mixin class into a class.
      *
@@ -65,6 +204,77 @@ final class Zend
      * @param list<non-empty-string>|null $methods
      */
     public static function injectMixinMethods(string $className, string $traitName, ?array $methods = null): void
+    {
+        $key = strtolower($className) . '|' . strtolower($traitName);
+        if (isset(self::$activeTransformations[$key])) {
+            throw new InvalidArgumentException(sprintf(
+                'Mixin transformation is already active for %s with %s',
+                $className,
+                $traitName,
+            ));
+        }
+        self::$activeTransformations[$key] = true;
+        self::debug('started', $className, $traitName);
+        $before = self::snapshotMethods($className);
+
+        try {
+            self::applyMixinMethods($className, $traitName, $methods);
+            if (self::debugOptions()->export) {
+                self::$snapshots[] = new TransformationSnapshot($className, $traitName, $before, self::snapshotMethods($className));
+            }
+            self::debug('completed', $className, $traitName);
+        } catch (\Throwable $exception) {
+            self::debug('failed', $className, $traitName, $exception->getMessage());
+            throw $exception;
+        } finally {
+            unset(self::$activeTransformations[$key]);
+        }
+    }
+
+    private static function debug(string $phase, string $className, string $mixin, ?string $error = null): void
+    {
+        if (!self::debugOptions()->verbose) {
+            return;
+        }
+
+        $message = sprintf('[Communism\\Mixin] %s %s <- %s', $phase, $className, $mixin);
+        if ($error !== null) {
+            $message .= ': ' . $error;
+        }
+        fwrite(STDERR, $message . PHP_EOL);
+    }
+
+    /** @return array<string, string> */
+    private static function snapshotMethods(string $className): array
+    {
+        if (!class_exists($className)) {
+            return [];
+        }
+
+        $snapshot = [];
+        foreach ((new \ReflectionClass($className))->getMethods() as $method) {
+            if ($method->isInternal()) {
+                continue;
+            }
+            try {
+                $snapshot[$method->getName()] = \Communism\Bytecode\Bytecode::disassemble(
+                    $method->getDeclaringClass()->getName() . '::' . $method->getName(),
+                );
+            } catch (\Throwable) {
+                // A snapshot must never prevent an otherwise valid transform.
+            }
+        }
+
+        ksort($snapshot);
+
+        return $snapshot;
+    }
+
+    /**
+     * @param class-string $traitName
+     * @param list<non-empty-string>|null $methods
+     */
+    private static function applyMixinMethods(string $className, string $traitName, ?array $methods = null): void
     {
         $mixin = new \ReflectionClass($traitName);
 
@@ -89,14 +299,31 @@ final class Zend
         $class = new \ReflectionClass($className);
 
         $mixins = $mixin->getAttributes(Mixin::class);
-        if (count($mixins) !== 1) {
-            throw new InvalidArgumentException(sprintf('Mixin %s must have exactly one #[Mixin] declaration', $traitName));
+        if ($mixins === []) {
+            throw new InvalidArgumentException(sprintf('Mixin %s must have at least one #[Mixin] declaration', $traitName));
         }
 
-        $targetDeclaration = $mixins[0];
-        if (!$targetDeclaration->newInstance()->allows($className)) {
+        $applies = $mixin->getAttributes(Applies::class);
+        $allowed = false;
+        foreach ($mixins as $targetDeclaration) {
+            if ($targetDeclaration->newInstance()->allows($className)) {
+                $allowed = true;
+                break;
+            }
+        }
+        foreach ($applies as $selector) {
+            if ($selector->newInstance()->matches($className)) {
+                $allowed = true;
+                break;
+            }
+        }
+        if (!$allowed) {
             throw new InvalidArgumentException(sprintf('Mixin %s is not allowed to be injected into %s', $traitName, $className));
         }
+
+        $interfaceMappings = self::interfaceMethodMappings($mixin);
+        $mixinUnique = $mixin->getAttributes(Unique::class) !== [];
+        $propertyMappings = [];
 
         $availableMethods = [];
         /** @var array<string, string> $surrogates */
@@ -107,6 +334,8 @@ final class Zend
             }
             $shadow = $method->getAttributes(Shadow::class);
             $overwrite = $method->getAttributes(Overwrite::class);
+            $intrinsic = $method->getAttributes(Intrinsic::class);
+            $softOverride = $method->getAttributes(SoftOverride::class);
             $injection = array_merge(
                 $method->getAttributes(Inject::class),
                 $method->getAttributes(ModifyArg::class),
@@ -185,6 +414,21 @@ final class Zend
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Overwrite]', $traitName, $method->getName()));
                 // @codeCoverageIgnoreEnd
             }
+            if (count($intrinsic) > 1) {
+                throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Intrinsic]', $traitName, $method->getName()));
+            }
+            if ($intrinsic !== [] && $overwrite !== []) {
+                throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine #[Intrinsic] and #[Overwrite]', $traitName, $method->getName()));
+            }
+            if ($intrinsic !== [] && $method->isStatic()) {
+                throw new InvalidArgumentException(sprintf('Intrinsic method %s::%s cannot be static', $traitName, $method->getName()));
+            }
+            if (count($softOverride) > 1) {
+                throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[SoftOverride]', $traitName, $method->getName()));
+            }
+            if ($softOverride !== [] && ($overwrite !== [] || $intrinsic !== [] || $method->getAttributes(Unique::class) !== [])) {
+                throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine #[SoftOverride] with another composition annotation', $traitName, $method->getName()));
+            }
             if (count($shadow) > 1) {
                 // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Shadow]', $traitName, $method->getName()));
@@ -248,7 +492,7 @@ final class Zend
                 continue;
             }
 
-            $shadowTarget = $shadow[0]->newInstance()->target ?? $methodName;
+            $shadowTarget = self::shadowMethodTarget($className, $methodName, $shadow[0]->newInstance());
             if (!$class->hasMethod($shadowTarget)) {
                 throw new InvalidArgumentException(sprintf(
                     'Class %s has no method %s shadowed by %s::%s',
@@ -266,19 +510,56 @@ final class Zend
         }
         foreach ($methodsToCompose as $methodName) {
             $overwrite = $availableMethods[$methodName]->getAttributes(Overwrite::class);
-            $targetMethod = $overwrite === [] ? $methodName : ($overwrite[0]->newInstance()->method ?? $methodName);
+            $intrinsic = $availableMethods[$methodName]->getAttributes(Intrinsic::class);
+            $softOverride = $availableMethods[$methodName]->getAttributes(SoftOverride::class);
+            $targetMethod = $interfaceMappings[$methodName]['target']
+                ?? ($overwrite === [] ? $methodName : self::overwriteTargetName($className, $methodName, $overwrite[0]->newInstance()));
             if ($targetMethod === '') {
                 throw new InvalidArgumentException('Injected method names must not be empty');
             }
             $hasTargetMethod = $class->hasMethod($targetMethod);
 
-            $unique = $availableMethods[$methodName]->getAttributes(Unique::class) !== [];
-            if ($overwrite === [] && $hasTargetMethod && !$unique) {
+            if ($softOverride !== []) {
+                if (!$hasTargetMethod) {
+                    throw new InvalidArgumentException(sprintf('SoftOverride method %s::%s has no target method to override', $traitName, $methodName));
+                }
+                $targetReflection = new \ReflectionMethod($className, $targetMethod);
+                if ($targetReflection->getDeclaringClass()->getName() === $className) {
+                    throw new InvalidArgumentException(sprintf('SoftOverride method %s::%s must target an inherited method', $traitName, $methodName));
+                }
+                if ($availableMethods[$methodName]->isPrivate()) {
+                    throw new InvalidArgumentException(sprintf('SoftOverride method %s::%s cannot be private', $traitName, $methodName));
+                }
+                self::validateOverwriteSignature($className, $targetMethod, $availableMethods[$methodName], $traitName);
+            }
+
+
+            $unique = $mixinUnique
+                || $availableMethods[$methodName]->getAttributes(Unique::class) !== []
+                || ($interfaceMappings[$methodName]['unique'] ?? false);
+            if ($overwrite === [] && $hasTargetMethod && !$unique && $intrinsic === [] && $softOverride === []) {
                 throw new InvalidArgumentException(sprintf('Class %s already has method %s', $className, $targetMethod));
             }
 
             if ($overwrite !== [] && !$hasTargetMethod) {
                 throw new InvalidArgumentException(sprintf('Class %s has no method %s to override', $className, $targetMethod));
+            }
+            if ($overwrite !== []) {
+                self::validateOverwriteSignature(
+                    $className,
+                    $targetMethod,
+                    $availableMethods[$methodName],
+                    $traitName,
+                );
+            }
+            if ($intrinsic !== [] && $intrinsic[0]->newInstance()->displace && $hasTargetMethod
+                && (new \ReflectionMethod($className, $targetMethod))->getDeclaringClass()->getName() !== $className
+            ) {
+                throw new InvalidArgumentException(sprintf(
+                    'Intrinsic method %s::%s cannot displace an inherited method',
+                    $traitName,
+                    $methodName,
+                ));
             }
 
         }
@@ -296,21 +577,25 @@ final class Zend
         }
 
         foreach ($mixin->getProperties() as $traitProperty) {
-            if ($traitProperty->getAttributes(Shadow::class) === []) {
+            $shadowAttributes = $traitProperty->getAttributes(Shadow::class);
+            if ($shadowAttributes === []) {
                 throw new InvalidArgumentException(sprintf('Trait property %s::$%s must be marked with #[Shadow]', $traitName, $traitProperty->getName()));
             }
+            $shadow = $shadowAttributes[0]->newInstance();
+            $targetProperty = self::shadowPropertyTarget($className, $traitProperty->getName(), $shadow);
+            $propertyMappings[$traitProperty->getName()] = $targetProperty;
 
             try {
-                $classProperty = $class->getProperty($traitProperty->getName());
+                $classProperty = $class->getProperty($targetProperty);
             } catch (\ReflectionException) {
-                throw new InvalidArgumentException(sprintf('Class %s is missing mixin property %s', $className, $traitProperty->getName()));
+                throw new InvalidArgumentException(sprintf('Class %s is missing mixin property %s', $className, $targetProperty));
             }
 
             if (\strval($traitProperty->getType()) !== \strval($classProperty->getType())
                 || $traitProperty->isStatic() !== $classProperty->isStatic()
                 || $traitProperty->isReadOnly() !== $classProperty->isReadOnly()
             ) {
-                throw new InvalidArgumentException(sprintf('Trait property %s does not match class %s::$%s', $traitName, $className, $traitProperty->getName()));
+                throw new InvalidArgumentException(sprintf('Trait property %s does not match class %s::$%s', $traitName, $className, $targetProperty));
             }
             $propertyFinal = $traitProperty->getAttributes(Final_::class);
             $propertyMutable = $traitProperty->getAttributes(Mutable::class);
@@ -340,11 +625,12 @@ final class Zend
                 $inject = self::attachGroup($attribute->newInstance(), $group);
                 if (!$class->hasMethod($inject->method)) {
                     throw new InvalidArgumentException(sprintf(
-                        'Class %s has no method %s for injection from %s::%s',
+                        'Class %s has no method %s for injection from %s::%s%s',
                         $className,
                         $inject->method,
                         $traitName,
                         $method->getName(),
+                        self::dynamicDiagnostic($method),
                     ));
                 }
 
@@ -363,9 +649,9 @@ final class Zend
                         $method->getName(),
                     ));
                 }
-                $constantTarget = $modify->constant === null && $modify->type !== 'null' ? '' : $modify->constant;
+                $constantTarget = $modify->constant === null && $modify->type !== 'null' && !$modify->nullValue ? '' : $modify->constant;
                 $at = new At($modify->at->value, $constantTarget, $modify->at->ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
-                $inject = self::attachGroup(new Inject($modify->method, $at, true, null, null, null, null, null, null, $modify->type), $group);
+                $inject = self::attachGroup(new Inject($modify->method, $at, true, null, null, null, $modify->slice, null, null, $modify->type, nullValue: $modify->nullValue), $group);
                 if (!$class->hasMethod($inject->method)) {
                     throw new InvalidArgumentException(sprintf(
                         'Class %s has no method %s for injection from %s::%s',
@@ -391,6 +677,23 @@ final class Zend
                         $method->getName(),
                     ));
                 }
+                if ($modify->print) {
+                    if (!$class->hasMethod($modify->method)) {
+                        throw new InvalidArgumentException(sprintf(
+                            'Class %s has no method %s for ModifyVariable print mode from %s::%s',
+                            $className,
+                            $modify->method,
+                            $traitName,
+                            $method->getName(),
+                        ));
+                    }
+                    self::printModifyVariableLocals(
+                        \Communism\Internals\Needle\Decompiler::decompile($className . '::' . $modify->method),
+                        $className,
+                        $modify->method,
+                    );
+                    continue;
+                }
                 $ordinal = $modify->ordinal >= 0 ? $modify->ordinal : $modify->at->ordinal;
                 $at = new At($modify->at->value, $modify->name ?? '', $ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
                 $inject = self::attachGroup(new Inject(
@@ -400,6 +703,9 @@ final class Zend
                     expect: $modify->expect,
                     allow: $modify->allow,
                     variableIndex: $modify->index,
+                    variableType: self::handlerVariableType($method),
+                    variableArgsOnly: $modify->argsOnly,
+                    slice: $modify->slice,
                 ), $group);
                 if (!$class->hasMethod($inject->method)) {
                     throw new InvalidArgumentException(sprintf(
@@ -427,7 +733,7 @@ final class Zend
                     ));
                 }
                 $at = new At($modify->at->value, $modify->at->target, $modify->at->ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
-                $inject = self::attachGroup(new Inject($modify->method, $at, true, null, null, null, null, $modify->index), $group);
+                $inject = self::attachGroup(new Inject($modify->method, $at, argumentIndex: $modify->index, slice: $modify->slice), $group);
                 if (!$class->hasMethod($inject->method)) {
                     throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $inject->method, $traitName, $method->getName()));
                 }
@@ -443,7 +749,7 @@ final class Zend
                     ));
                 }
                 $at = new At($modify->at->value, $modify->at->target, $modify->at->ordinal, $modify->at->shift, $modify->at->by, 'replace', $modify->at->opcode);
-                $inject = self::attachGroup(new Inject($modify->method, $at, true, mode: 'args'), $group);
+                $inject = self::attachGroup(new Inject($modify->method, $at, true, slice: $modify->slice, mode: 'args'), $group);
                 if (!$class->hasMethod($inject->method)) {
                     throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $inject->method, $traitName, $method->getName()));
                 }
@@ -458,7 +764,7 @@ final class Zend
                         $method->getName(),
                     ));
                 }
-                $inject = self::attachGroup(new Inject($redirect->method, new At($redirect->at->value, $redirect->at->target, $redirect->at->ordinal, $redirect->at->shift, $redirect->at->by, 'replace', $redirect->at->opcode)), $group);
+                $inject = self::attachGroup(new Inject($redirect->method, new At($redirect->at->value, $redirect->at->target, $redirect->at->ordinal, $redirect->at->shift, $redirect->at->by, 'replace', $redirect->at->opcode), slice: $redirect->slice), $group);
                 if (!$class->hasMethod($inject->method)) {
                     throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $inject->method, $traitName, $method->getName()));
                 }
@@ -472,10 +778,12 @@ final class Zend
             $body = \Communism\Internals\Needle\Decompiler::decompile($className . '::' . $targetMethod);
             $definitions = [];
             $handlers = [];
+            $handlerNames = [];
             $surrogateHandlers = [];
             foreach ($injections as $injection) {
                 $definitions[] = $injection['inject'];
                 $handlers[spl_object_id($injection['inject'])] = \Communism\Internals\Needle\Decompiler::decompile($traitName . '::' . $injection['handler']);
+                $handlerNames[spl_object_id($injection['inject'])] = $injection['handler'];
                 if ($injection['surrogate'] !== null) {
                     $surrogateHandlers[spl_object_id($injection['inject'])] = \Communism\Internals\Needle\Decompiler::decompile($traitName . '::' . $injection['surrogate']);
                 }
@@ -488,6 +796,8 @@ final class Zend
                 static function (Inject $inject, \Communism\Internals\Needle\MethodBody $handler, \Communism\Internals\Needle\CaptureException $exception) use ($surrogateHandlers): ?\Communism\Internals\Needle\MethodBody {
                     return $surrogateHandlers[spl_object_id($inject)] ?? null;
                 },
+                $traitName,
+                static fn(Inject $inject): string => $handlerNames[spl_object_id($inject)],
             );
         }
 
@@ -498,7 +808,7 @@ final class Zend
                 continue;
             }
 
-            self::setPropertyMutability($className, $traitProperty->getName(), $propertyMutable, $propertyFinal);
+            self::setPropertyMutability($className, self::shadowPropertyTarget($className, $traitProperty->getName(), $traitProperty->getAttributes(Shadow::class)[0]->newInstance()), $propertyMutable, $propertyFinal);
         }
 
         foreach ($methodNames as $methodName) {
@@ -510,26 +820,36 @@ final class Zend
             }
 
             $generated = $accessor !== [] ? $accessor[0]->newInstance() : $invoker[0]->newInstance();
-            $kind = $accessor !== [] ? 'accessor' : 'invoker';
-            $templateName = $kind === 'accessor'
-                ? ($method->isStatic() ? 'accessorStatic' : 'accessor')
-                : ($method->isStatic() ? 'invokerStatic' : 'invoker');
             $sourceMethod = Zendful::method($traitName, $methodName);
             class_exists(AccessorInvokerTemplates::class);
-            $templateMethod = Zendful::method(AccessorInvokerTemplates::class, $templateName);
-            if (!$sourceMethod->exists() || !$templateMethod->exists()) {
+            if (!$sourceMethod->exists()) {
                 // @codeCoverageIgnoreStart
-                throw new InvalidArgumentException('Generated accessor/invoker template was not found');
+                throw new InvalidArgumentException('Generated accessor/invoker source method was not found');
                 // @codeCoverageIgnoreEnd
             }
-            $sourceMethod->installGeneratedInto(Zendful::class($className), $templateMethod, $methodName);
-
             if ($accessor !== []) {
+                $templateName = self::accessorIsSetter($method)
+                    ? ($method->isStatic() ? 'accessorStaticSet' : 'accessorSet')
+                    : ($method->isStatic() ? 'accessorStaticGet' : 'accessorGet');
+                $templateMethod = Zendful::method(AccessorInvokerTemplates::class, $templateName);
+                if (!$templateMethod->exists()) {
+                    throw new InvalidArgumentException('Generated accessor template was not found');
+                }
                 $property = self::accessorProperty($className, $method, $generated->target);
-                AccessorInvokerRuntime::registerAccessor($className, $methodName, $property, self::accessorIsSetter($method));
+                self::installGeneratedAccessor($sourceMethod, $templateMethod, $className, $methodName, $property);
             } else {
                 $targetMethod = self::invokerMethod($class, $method, $generated->target);
-                AccessorInvokerRuntime::registerInvoker($className, $methodName, $targetMethod);
+                if ($method->isStatic() !== $class->getMethod($targetMethod)->isStatic()) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Invoker %s::%s and target %s::%s must both be static or instance methods',
+                        $traitName,
+                        $methodName,
+                        $className,
+                        $targetMethod,
+                    ));
+                }
+                Zendful::method($className, $targetMethod)->installInto(Zendful::class($className), $methodName);
+                Zendful::method($className, $methodName)->setVisibility(self::methodVisibility($method));
             }
         }
 
@@ -547,7 +867,10 @@ final class Zend
             }
 
             $overwrite = $availableMethods[$methodName]->getAttributes(Overwrite::class);
-            $targetMethod = $overwrite === [] ? $methodName : ($overwrite[0]->newInstance()->method ?? $methodName);
+            $intrinsic = $availableMethods[$methodName]->getAttributes(Intrinsic::class);
+            $softOverride = $availableMethods[$methodName]->getAttributes(SoftOverride::class);
+            $targetMethod = $interfaceMappings[$methodName]['target']
+                ?? ($overwrite === [] ? $methodName : self::overwriteTargetName($className, $methodName, $overwrite[0]->newInstance()));
             $methodLower = mb_strtolower($targetMethod);
             if ($targetMethod === '') {
                 // @codeCoverageIgnoreStart
@@ -555,6 +878,19 @@ final class Zend
                 // @codeCoverageIgnoreEnd
             }
 
+            if ($propertyMappings !== []) {
+                $sourceBody = \Communism\Internals\Needle\Decompiler::decompile($traitName . '::' . $methodName);
+                $rewritten = self::rewriteShadowProperties($sourceBody, $propertyMappings);
+                \Communism\Internals\Needle\Assembler::write($rewritten, $sourceMethod->opArray());
+            }
+
+            if ($intrinsic !== [] && method_exists($className, $targetMethod)) {
+                if (!$intrinsic[0]->newInstance()->displace) {
+                    continue;
+                }
+            }
+
+            $displacedName = null;
             if ($overwrite !== []) {
                 $deletedName = '';
                 for ($deleted = 0; $deletedName === ''; $deleted++) {
@@ -564,9 +900,20 @@ final class Zend
                     }
                 }
                 Zendful::method($className, $targetMethod)->renameTo($deletedName);
+                $displacedName = $deletedName;
+            } elseif ($intrinsic !== [] && method_exists($className, $targetMethod)) {
+                $deletedName = '';
+                for ($deleted = 0; $deletedName === ''; $deleted++) {
+                    $candidate = '__intrinsic' . $deleted;
+                    if (!method_exists($className, $candidate)) {
+                        $deletedName = $candidate;
+                    }
+                }
+                Zendful::method($className, $targetMethod)->renameTo($deletedName);
+                $displacedName = $deletedName;
             }
 
-            if ($overwrite === [] && method_exists($className, $targetMethod)) {
+            if ($overwrite === [] && method_exists($className, $targetMethod) && $softOverride === []) {
                 $uniqueName = '__unique_' . mb_strtolower($traitName) . '_' . $targetMethod;
                 $uniqueName = preg_replace('/[^a-z0-9_]+/i', '_', $uniqueName) ?? ('__unique_' . $targetMethod);
                 for ($suffix = 0; method_exists($className, $uniqueName); $suffix++) {
@@ -574,6 +921,12 @@ final class Zend
                 }
                 $targetMethod = $uniqueName;
                 $methodLower = mb_strtolower($targetMethod);
+            }
+
+            if ($displacedName !== null) {
+                $sourceBody = \Communism\Internals\Needle\Decompiler::decompile($traitName . '::' . $methodName);
+                $rewritten = self::rewriteIntrinsicCalls($sourceBody, $targetMethod, $displacedName);
+                \Communism\Internals\Needle\Assembler::write($rewritten, $sourceMethod->opArray());
             }
 
             $sourceMethod->installInto(
@@ -611,11 +964,238 @@ final class Zend
                 continue;
             }
 
-            $shadowTarget = $shadow[0]->newInstance()->target ?? $methodName;
+            $shadowTarget = self::shadowMethodTarget($className, $methodName, $shadow[0]->newInstance());
             self::setMethodMutability($className, $shadowTarget, $mutable, $final);
         }
 
+        foreach ($mixin->getAttributes(Implements_::class) as $declaration) {
+            foreach ($declaration->newInstance()->interfaces as $interface) {
+                Zendful::class($className)->implementInterface(Zendful::class($interface->interface));
+            }
+        }
+
         self::disableJitForClass($className);
+    }
+
+    private static function printModifyVariableLocals(\Communism\Internals\Needle\MethodBody $body, string $className, string $methodName): void
+    {
+        $locals = [];
+        foreach ($body->instructions() as $instruction) {
+            foreach ([$instruction->result, $instruction->operand1, $instruction->operand2] as $operand) {
+                if ($operand->kind !== \Communism\Internals\Needle\Operand::CV || !is_int($operand->value)) {
+                    continue;
+                }
+                $name = $body->variableName($operand);
+                if ($name === null || isset($locals[$operand->value])) {
+                    continue;
+                }
+                $locals[$operand->value] = sprintf(
+                    '%d $%s (%s)',
+                    $body->variableIndex($operand) ?? $operand->value,
+                    $name,
+                    $body->variableType($operand) ?? 'unknown',
+                );
+            }
+        }
+        ksort($locals);
+        fwrite(STDERR, sprintf("ModifyVariable locals for %s::%s:\n", $className, $methodName));
+        foreach ($locals as $local) {
+            fwrite(STDERR, "  " . $local . "\n");
+        }
+    }
+
+    private static function rewriteIntrinsicCalls(\Communism\Internals\Needle\MethodBody $body, string $method, string $displaced): \Communism\Internals\Needle\MethodBody
+    {
+        $instructions = [];
+        foreach ($body->instructions() as $instruction) {
+            if (in_array($instruction->name, ['INIT_METHOD_CALL', 'INIT_STATIC_METHOD_CALL'], true)
+                && $instruction->operand2->kind === \Communism\Internals\Needle\Operand::CONSTANT
+                && $instruction->operand2->value === $method
+            ) {
+                $instruction = $instruction->withOperands(
+                    $instruction->operand1,
+                    $instruction->operand2->withValue($displaced),
+                );
+            }
+            $instructions[] = $instruction;
+        }
+
+        return $body->withInstructions($instructions);
+    }
+
+    /**
+     * @param \ReflectionClass<object> $mixin
+     * @return array<string, array{target: string, unique: bool}>
+     */
+    private static function interfaceMethodMappings(\ReflectionClass $mixin): array
+    {
+        $declarations = $mixin->getAttributes(Implements_::class);
+        if ($declarations === []) {
+            return [];
+        }
+
+        $mappings = [];
+        foreach ($declarations[0]->newInstance()->interfaces as $declaration) {
+            foreach ((new \ReflectionClass($declaration->interface))->getMethods() as $interfaceMethod) {
+                $sourceName = $declaration->prefix . $interfaceMethod->getName();
+                if (!$mixin->hasMethod($sourceName)) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Mixin %s is missing %s for interface %s::%s',
+                        $mixin->getName(),
+                        $sourceName,
+                        $declaration->interface,
+                        $interfaceMethod->getName(),
+                    ));
+                }
+                if (isset($mappings[$sourceName])) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Mixin %s maps more than one interface method to %s',
+                        $mixin->getName(),
+                        $sourceName,
+                    ));
+                }
+                $mappings[$sourceName] = [
+                    'target' => $interfaceMethod->getName(),
+                    'unique' => $declaration->unique,
+                ];
+            }
+        }
+
+        return $mappings;
+    }
+
+    private static function overwriteTargetName(string $className, string $sourceName, Overwrite $overwrite): string
+    {
+        $primary = $overwrite->method ?? $sourceName;
+        foreach ([$primary, ...$overwrite->aliases] as $candidate) {
+            if (method_exists($className, $candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $primary;
+    }
+
+    private static function validateOverwriteSignature(
+        string $className,
+        string $targetMethod,
+        \ReflectionMethod $sourceMethod,
+        string $traitName,
+    ): void {
+        if (!class_exists($className)) {
+            throw new InvalidArgumentException(sprintf('Class %s is not declared', $className));
+        }
+        $target = (new \ReflectionClass($className))->getMethod($targetMethod);
+        $sameShape = $sourceMethod->isStatic() === $target->isStatic()
+            && $sourceMethod->isVariadic() === $target->isVariadic()
+            && $sourceMethod->getNumberOfParameters() === $target->getNumberOfParameters()
+            && self::reflectionTypeString($sourceMethod->getReturnType()) === self::reflectionTypeString($target->getReturnType());
+
+        if ($sameShape) {
+            foreach ($sourceMethod->getParameters() as $index => $sourceParameter) {
+                $targetParameter = $target->getParameters()[$index];
+                if ($sourceParameter->isVariadic() !== $targetParameter->isVariadic()
+                    || $sourceParameter->isPassedByReference() !== $targetParameter->isPassedByReference()
+                    || self::reflectionTypeString($sourceParameter->getType()) !== self::reflectionTypeString($targetParameter->getType())
+                ) {
+                    $sameShape = false;
+                    break;
+                }
+            }
+        }
+
+        $sameVisibility = $sourceMethod->isPublic() === $target->isPublic()
+            && $sourceMethod->isProtected() === $target->isProtected()
+            && $sourceMethod->isPrivate() === $target->isPrivate();
+        if (!$sameShape || !$sameVisibility) {
+            throw new InvalidArgumentException(sprintf(
+                'Overwrite %s::%s has an incompatible signature for %s::%s',
+                $traitName,
+                $sourceMethod->getName(),
+                $className,
+                $targetMethod,
+            ));
+        }
+    }
+
+    private static function dynamicDiagnostic(\ReflectionMethod $method): string
+    {
+        $dynamic = $method->getAttributes(Dynamic::class);
+        if ($dynamic === []) {
+            return '';
+        }
+
+        return sprintf(' (dynamic: %s)', $dynamic[0]->newInstance()->description());
+    }
+
+    private static function reflectionTypeString(?\ReflectionType $type): string
+    {
+        return $type === null ? '' : (string) $type;
+    }
+
+    private static function shadowMethodTarget(string $className, string $methodName, Shadow $shadow): string
+    {
+        $primary = $shadow->target;
+        if ($primary === null && $shadow->prefix === '') {
+            $primary = $methodName;
+        }
+        if ($primary === null && !\str_starts_with($methodName, $shadow->prefix)) {
+            throw new InvalidArgumentException(sprintf(
+                'Shadow method %s does not start with prefix %s',
+                $methodName,
+                $shadow->prefix,
+            ));
+        }
+
+        $target = $primary ?? substr($methodName, strlen($shadow->prefix));
+        if ($target === '') {
+            throw new InvalidArgumentException(sprintf(
+                'Shadow method %s has no target after prefix %s',
+                $methodName,
+                $shadow->prefix,
+            ));
+        }
+
+        foreach ([$target, ...$shadow->aliases] as $candidate) {
+            if (method_exists($className, $candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $target;
+    }
+
+    private static function shadowPropertyTarget(string $className, string $propertyName, Shadow $shadow): string
+    {
+        $primary = $shadow->target ?? $propertyName;
+        foreach ([$primary, ...$shadow->aliases] as $candidate) {
+            if (property_exists($className, $candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $primary;
+    }
+
+    /** @param array<string, string> $mappings */
+    private static function rewriteShadowProperties(\Communism\Internals\Needle\MethodBody $body, array $mappings): \Communism\Internals\Needle\MethodBody
+    {
+        $instructions = [];
+        foreach ($body->instructions() as $instruction) {
+            if (in_array($instruction->name, ['FETCH_OBJ_R', 'FETCH_OBJ_W', 'FETCH_OBJ_IS', 'ASSIGN_OBJ'], true)
+                && $instruction->operand2->kind === \Communism\Internals\Needle\Operand::CONSTANT
+                && is_string($instruction->operand2->value)
+                && isset($mappings[$instruction->operand2->value])
+            ) {
+                $instruction = $instruction->withOperands(
+                    $instruction->operand1,
+                    $instruction->operand2->withValue($mappings[$instruction->operand2->value]),
+                );
+            }
+            $instructions[] = $instruction;
+        }
+
+        return $body->withInstructions($instructions);
     }
 
     /** @param class-string $className */
@@ -672,6 +1252,44 @@ final class Zend
     private static function accessorIsSetter(\ReflectionMethod $method): bool
     {
         return count($method->getParameters()) === 1 && str_starts_with($method->getName(), 'set');
+    }
+
+    private static function installGeneratedAccessor(
+        \Zendful\MethodHandle $source,
+        \Zendful\MethodHandle $template,
+        string $className,
+        string $methodName,
+        string $property,
+    ): void {
+        $templateName = $template->methodName();
+        $original = \Communism\Internals\Needle\Decompiler::decompile(AccessorInvokerTemplates::class . '::' . $templateName);
+        $rewritten = $original->withInstructions(array_map(
+            static fn(\Communism\Internals\Needle\Instruction $instruction): \Communism\Internals\Needle\Instruction => $instruction->withOperands(
+                self::replaceAccessorProperty($instruction->operand1, $property),
+                self::replaceAccessorProperty($instruction->operand2, $property),
+                self::replaceAccessorProperty($instruction->result, $property),
+            ),
+            $original->instructions(),
+        ));
+        // The source method is unique to this accessor and carries the
+        // accessor's public signature. Assemble its direct member bytecode
+        // there, then clone that body into the target. This avoids sharing a
+        // mutable placeholder op-array between separately generated methods.
+        \Communism\Internals\Needle\Assembler::write($rewritten, $source->opArray());
+        $source->installInto(Zendful::class($className), $methodName);
+    }
+
+    private static function replaceAccessorProperty(\Communism\Internals\Needle\Operand $operand, string $property): \Communism\Internals\Needle\Operand
+    {
+        return $operand->kind === \Communism\Internals\Needle\Operand::CONSTANT
+            && in_array($operand->value, ['accessorPlaceholder', 'accessorStaticPlaceholder'], true)
+            ? $operand->withValue($property)
+            : $operand;
+    }
+
+    private static function methodVisibility(\ReflectionMethod $method): string
+    {
+        return $method->isPrivate() ? 'private' : ($method->isProtected() ? 'protected' : 'public');
     }
 
     /** @return non-empty-string */
@@ -774,7 +1392,20 @@ final class Zend
             $inject->mode,
             $inject->locals,
             $inject->variableIndex,
+            $inject->variableType,
+            $inject->nullValue,
         );
+    }
+
+    private static function handlerVariableType(\ReflectionMethod $method): ?string
+    {
+        $parameters = $method->getParameters();
+        if ($parameters === []) {
+            return null;
+        }
+        $type = $parameters[0]->getType() ?? null;
+
+        return $type instanceof \ReflectionNamedType && !$type->allowsNull() ? $type->getName() : null;
     }
 
     /**

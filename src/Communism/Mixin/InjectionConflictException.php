@@ -18,39 +18,28 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: InjectionConflictException.php                                       *
+ * Consumer: Users                                                            *
+ * Purpose: Structured diagnostics for incompatible injection placements.     *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+use InvalidArgumentException;
+
+/** Describes two injection placements which cannot coexist safely. */
+final class InjectionConflictException extends InvalidArgumentException
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
-
-    public function accessorGet(): mixed
-    {
-        return $this->accessorPlaceholder;
+    public function __construct(
+        public readonly string $kind,
+        public readonly int $firstStart,
+        public readonly int $firstEnd,
+        public readonly int $secondStart,
+        public readonly int $secondEnd,
+        string $message = '',
+    ) {
+        parent::__construct($message);
     }
-
-    public function accessorSet(mixed $value): void
-    {
-        $this->accessorPlaceholder = $value;
-    }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
 }

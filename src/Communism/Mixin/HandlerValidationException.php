@@ -18,39 +18,31 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: HandlerValidationException.php                                       *
+ * Consumer: Users                                                            *
+ * Purpose: Structured diagnostics for handler preparation failures.          *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+use InvalidArgumentException;
+use Throwable;
+
+/** Describes a handler validation failure at a resolved injection span. */
+final class HandlerValidationException extends InvalidArgumentException
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
-
-    public function accessorGet(): mixed
-    {
-        return $this->accessorPlaceholder;
+    public function __construct(
+        public readonly string $handlerMethod,
+        public readonly string $targetMethod,
+        public readonly string $point,
+        public readonly int $start,
+        public readonly int $end,
+        public readonly string $selector,
+        Throwable $previous,
+        string $message = '',
+    ) {
+        parent::__construct($message !== '' ? $message : $previous->getMessage(), 0, $previous);
     }
-
-    public function accessorSet(mixed $value): void
-    {
-        $this->accessorPlaceholder = $value;
-    }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
 }

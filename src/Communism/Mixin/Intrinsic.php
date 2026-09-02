@@ -18,39 +18,20 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: Intrinsic.php                                                        *
+ * Consumer: Users                                                            *
+ * Purpose: Declares a collision-safe intrinsic Mixin method.                 *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+use Attribute;
+
+/** Declares a collision-safe method which is only composed when absent. */
+#[Attribute(Attribute::TARGET_METHOD)]
+final class Intrinsic
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
-
-    public function accessorGet(): mixed
-    {
-        return $this->accessorPlaceholder;
-    }
-
-    public function accessorSet(mixed $value): void
-    {
-        $this->accessorPlaceholder = $value;
-    }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
+    public function __construct(public readonly bool $displace = false) {}
 }

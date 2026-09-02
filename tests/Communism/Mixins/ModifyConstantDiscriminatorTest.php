@@ -112,3 +112,34 @@ it('rejects a class discriminator for an arbitrary string before mutation', func
 
     expect((new ModifyConstantClassMissingTarget())->value())->toBe('not-a-class');
 });
+
+#[Mixin(ModifyConstantNullTarget::class)]
+final class ModifyConstantNullMixin
+{
+    private function __construct() {}
+
+    #[ModifyConstant('value', new At('CONSTANT'), type: 'null', nullValue: true)]
+    public function replaceNull(mixed $constant): string
+    {
+        return 'replaced';
+    }
+}
+
+final class ModifyConstantNullTarget
+{
+    public function value(bool $includeNull): string
+    {
+        return ($includeNull ? null : 'kept') ?? 'fallback';
+    }
+}
+
+it('matches null literals with the explicit nullValue discriminator', function (): void {
+    (new ReflectionClass(ModifyConstantNullTarget::class))->inject(ModifyConstantNullMixin::class);
+
+    expect((new ModifyConstantNullTarget())->value(true))->toBe('replaced');
+});
+
+it('rejects an inconsistent nullValue discriminator', function (): void {
+    expect(fn(): ModifyConstant => new ModifyConstant('value', new At('CONSTANT'), type: 'string', nullValue: true))
+        ->toThrow(InvalidArgumentException::class, 'nullValue requires the null type discriminator');
+});

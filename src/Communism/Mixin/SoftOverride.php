@@ -18,39 +18,17 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: SoftOverride.php                                                     *
+ * Consumer: Users                                                            *
+ * Purpose: Source file for SoftOverride.php.                                 *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
-{
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
+use Attribute;
 
-    public function accessorGet(): mixed
-    {
-        return $this->accessorPlaceholder;
-    }
-
-    public function accessorSet(mixed $value): void
-    {
-        $this->accessorPlaceholder = $value;
-    }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
-}
+/** Shadows an inherited method on the transformed target class only. */
+#[Attribute(Attribute::TARGET_METHOD)]
+final class SoftOverride {}

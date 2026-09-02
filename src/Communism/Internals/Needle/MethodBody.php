@@ -37,6 +37,7 @@ final class MethodBody
     /**
      * @param list<Instruction> $instructions
      * @param array<int, string> $variableNames
+     * @param array<int, string> $variableTypes
      */
     public function __construct(
         public readonly string $name,
@@ -47,6 +48,7 @@ final class MethodBody
         private readonly array $variableNames = [],
         public readonly int $temporaryCount = 0,
         public readonly int $cacheSize = 0,
+        private readonly array $variableTypes = [],
     ) {
         $this->instructions = $instructions;
     }
@@ -92,6 +94,15 @@ final class MethodBody
         return null;
     }
 
+    public function variableType(Operand $operand): ?string
+    {
+        if ($operand->kind !== Operand::CV || !is_int($operand->value)) {
+            return null;
+        }
+
+        return $this->variableTypes[$operand->value] ?? null;
+    }
+
     /** Returns the declaration-order local index for a CV operand. */
     public function variableIndex(Operand $operand): ?int
     {
@@ -112,18 +123,18 @@ final class MethodBody
 
     public function withTemporaryCount(int $temporaryCount): self
     {
-        return new self($this->name, $this->filename, $this->lineStart, $this->lineEnd, $this->instructions, $this->variableNames, $temporaryCount, $this->cacheSize);
+        return new self($this->name, $this->filename, $this->lineStart, $this->lineEnd, $this->instructions, $this->variableNames, $temporaryCount, $this->cacheSize, $this->variableTypes);
     }
 
     public function withCacheSize(int $cacheSize): self
     {
-        return new self($this->name, $this->filename, $this->lineStart, $this->lineEnd, $this->instructions, $this->variableNames, $this->temporaryCount, $cacheSize);
+        return new self($this->name, $this->filename, $this->lineStart, $this->lineEnd, $this->instructions, $this->variableNames, $this->temporaryCount, $cacheSize, $this->variableTypes);
     }
 
     /** @param list<Instruction> $instructions */
     public function withInstructions(array $instructions): self
     {
-        return new self($this->name, $this->filename, $this->lineStart, $this->lineEnd, $instructions, $this->variableNames, $this->temporaryCount, $this->cacheSize);
+        return new self($this->name, $this->filename, $this->lineStart, $this->lineEnd, $instructions, $this->variableNames, $this->temporaryCount, $this->cacheSize, $this->variableTypes);
     }
 
     public function replace(int $index, Instruction $instruction): self

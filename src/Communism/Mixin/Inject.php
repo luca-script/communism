@@ -60,6 +60,9 @@ final class Inject
         public readonly string $mode = 'inject',
         public readonly LocalCapture $locals = LocalCapture::CAPTURE_FAILHARD,
         public readonly ?int $variableIndex = null,
+        public readonly ?string $variableType = null,
+        public readonly bool $nullValue = false,
+        public readonly bool $variableArgsOnly = false,
     ) {
         if ($method === '') {
             throw new \InvalidArgumentException('An injection target method must not be empty');
@@ -86,8 +89,17 @@ final class Inject
         if ($variableIndex !== null && !in_array($at->type(), ['STORE', 'LOAD'], true)) {
             throw new \InvalidArgumentException('An Inject variable index requires a STORE or LOAD point');
         }
+        if ($variableType !== null && !in_array($at->type(), ['STORE', 'LOAD'], true)) {
+            throw new \InvalidArgumentException('An Inject variable type requires a STORE or LOAD point');
+        }
         if ($constantType !== null && !in_array($constantType, ['int', 'long', 'float', 'double', 'string', 'null', 'bool', 'array', 'object', 'class'], true)) {
             throw new \InvalidArgumentException('Unsupported constant type discriminator');
+        }
+        if ($nullValue && $constantType !== null && $constantType !== 'null') {
+            throw new \InvalidArgumentException('Inject nullValue requires the null constant type discriminator');
+        }
+        if ($nullValue && $at->type() !== 'CONSTANT') {
+            throw new \InvalidArgumentException('Inject nullValue requires a CONSTANT point');
         }
         if (!in_array($mode, ['inject', 'args'], true)) {
             throw new \InvalidArgumentException('Unsupported injection mode');

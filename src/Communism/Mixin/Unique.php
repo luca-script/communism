@@ -30,5 +30,8 @@ namespace Communism\Mixin;
 use Attribute;
 
 /** Marks an added member as collision-safe. */
-#[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_PROPERTY)]
-final class Unique {}
+#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_PROPERTY)]
+final class Unique
+{
+    public function __construct(public readonly bool $silent = false) {}
+}

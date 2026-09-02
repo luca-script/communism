@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Communism\Mixin\At;
+use Communism\Mixin\Inject;
 use Communism\Mixin\Mixin;
 use Communism\Internals\Needle\MatchResult;
 use Communism\Internals\Needle\Matcher;
@@ -76,7 +77,7 @@ final class CustomInjectionPointMixin
 {
     private function __construct() {}
 
-    #[\Communism\Mixin\Inject('value', new At('_CUSTOM_HEAD', action: 'before'))]
+    #[Inject('value', new At('_CUSTOM_HEAD', action: 'before'))]
     public function mark(): void
     {
         $GLOBALS['custom_injection_point_marker'] = 1;

@@ -29,12 +29,14 @@ namespace Communism\Mixin;
 
 use Attribute;
 
+use function strcasecmp;
+
 /**
  * Declares the classes to which a mixin class may be applied.
  *
- * This is the sole target declaration for a Mixin class.
+ * Additional reusable selectors can be declared with one or more Applies attributes.
  */
-#[Attribute(Attribute::TARGET_CLASS)]
+#[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
 final class Mixin
 {
     /** @var list<string> */
@@ -50,9 +52,15 @@ final class Mixin
         $this->targets = array_values($targets);
     }
 
-    /** @param class-string $class */
+    /** @param string $class */
     public function allows(string $class): bool
     {
-        return in_array('*', $this->targets, true) || in_array($class, $this->targets, true);
+        foreach ($this->targets as $target) {
+            if ($target === '*' || strcasecmp($target, $class) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

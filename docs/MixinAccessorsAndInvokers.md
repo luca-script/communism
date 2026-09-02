@@ -56,8 +56,10 @@ corresponding `whisper` method. Private and protected methods are valid
 targets, as are static methods. Invoker arguments and return values are
 forwarded unchanged.
 
-Generated implementations are internal runtime methods. They are not added
-to the mixin class and no helper object is created at the call site.
+Generated implementations are direct Zend bytecode clones. Accessors use
+property read/write opcodes and invokers clone the target method body; no
+reflection-backed runtime dispatcher or helper object is called at the call
+site.
 
 ## Final and mutable members
 

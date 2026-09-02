@@ -45,6 +45,7 @@ final class At
         public readonly int $by = 0,
         public readonly string $action = '',
         public readonly string $opcode = '',
+        public readonly ?ReferenceMap $referenceMap = null,
     ) {
         if ($value === '') {
             throw new \InvalidArgumentException('An injection point value must not be empty');
@@ -89,7 +90,13 @@ final class At
     {
         $description = $this->type();
         if ($this->target !== '') {
-            $description .= sprintf(' target %s', is_string($this->target) ? $this->target : 'custom invocation');
+            $targetDescription = is_string($this->target) || $this->target instanceof Desc
+                ? ($this->target instanceof Desc ? $this->target->selector() : $this->target)
+                : (is_array($this->target) && is_string($this->target[0] ?? null) ? $this->target[0] : 'custom invocation');
+            $description .= sprintf(
+                ' target %s',
+                $targetDescription,
+            );
         }
         if ($this->ordinal >= 0) {
             $description .= sprintf(' argument %d', $this->ordinal);

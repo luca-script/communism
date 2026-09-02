@@ -96,5 +96,10 @@ if (class_exists('Zendful\\Native\\ClassHandle', false)) {
         {
             Internals\Executor::initializeClassStatics($this);
         }
+
+        public function implementInterface(self $interface): void
+        {
+            Internals\Executor::implementInterface($this, $interface);
+        }
     }
 }

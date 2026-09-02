@@ -18,9 +18,9 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: ModifyVariable.php                                                   *
+ * File: Desc.php                                                             *
  * Consumer: Users                                                            *
- * Purpose: Source file for ModifyVariable.php.                               *
+ * Purpose: Source file for Desc.php.                                         *
  *============================================================================*/
 
 declare(strict_types=1);
@@ -29,34 +29,43 @@ namespace Communism\Mixin;
 
 use Attribute;
 
-/** Mixin-shaped declaration for replacing a local-variable value. */
-#[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
-final class ModifyVariable
+/** A PHP-shaped explicit selector signature for invocation targets. */
+#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
+final class Desc
 {
-    /** @param At $at */
+    /** @param list<string> $args */
     public function __construct(
-        public readonly string $method,
-        public readonly At $at,
-        public readonly ?string $name = null,
-        public readonly int $ordinal = -1,
-        public readonly ?int $require = null,
-        public readonly ?int $expect = null,
-        public readonly ?int $allow = null,
-        public readonly ?int $index = null,
-        public readonly bool $argsOnly = false,
-        public readonly bool $print = false,
-        public readonly ?Slice $slice = null,
+        public readonly string $value,
+        public readonly ?string $owner = null,
+        public readonly array $args = [],
+        public readonly string $returnType = 'void',
+        public readonly string $id = '',
     ) {
-        if ($index !== null && $index < 0) {
-            throw new \InvalidArgumentException('ModifyVariable index must be non-negative');
+        if ($value === '' || preg_match('/\s/', $value) === 1) {
+            throw new \InvalidArgumentException('Desc value must be a non-empty selector');
         }
-        foreach (['require' => $require, 'expect' => $expect, 'allow' => $allow] as $constraint => $count) {
-            if ($count !== null && $count < 0) {
-                throw new \InvalidArgumentException(sprintf('ModifyVariable %s must be non-negative', $constraint));
+        foreach ($args as $argument) {
+            if ($argument === '' || preg_match('/\s/', $argument) === 1) {
+                throw new \InvalidArgumentException('Desc argument types must be non-empty PHP names');
             }
         }
-        if ($print && ($require !== null || $expect !== null || $allow !== null)) {
-            throw new \InvalidArgumentException('ModifyVariable print mode cannot use match-count constraints');
+        if ($returnType === '') {
+            throw new \InvalidArgumentException('Desc return type must not be empty');
         }
+    }
+
+    public function selector(): string
+    {
+        if ($this->owner === null) {
+            return $this->value;
+        }
+
+        return $this->owner . '::' . $this->value;
+    }
+
+    /** @return array{parameters: list<string>, return: string} */
+    public function signature(): array
+    {
+        return ['parameters' => $this->args, 'return' => $this->returnType];
     }
 }

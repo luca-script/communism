@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Communism\Internals\Needle\Assembler;
 use Communism\Internals\Needle\Decompiler;
 use Communism\Internals\Needle\Operand;
+use Communism\Internals\Needle\Verifier;
 use Zendful\Zendful;
 
 final class AssemblerLiteralTarget
@@ -154,6 +155,31 @@ it('rejects invalid literal references and non-scalar constants', function (): v
     );
     expect(fn() => Assembler::write($body->replace(0, $nonScalar), $opArray))
         ->toThrow(RuntimeException::class, 'Only scalar constants');
+});
+
+it('independently verifies instruction metadata before assembly', function (): void {
+    $body = Decompiler::decompile(AssemblerLiteralTarget::class . '::stringValue');
+    $instruction = $body->instruction(0);
+
+    expect(static fn() => Verifier::verify($body->replace(
+        0,
+        $instruction->withOpcode($instruction->opcode, "RETURN\0"),
+    )))->toThrow(RuntimeException::class, 'invalid opcode metadata');
+
+    $negativeOriginalIndex = new \Communism\Internals\Needle\Instruction(
+        $instruction->opcode,
+        $instruction->name,
+        $instruction->result,
+        $instruction->operand1,
+        $instruction->operand2,
+        $instruction->extendedValue,
+        $instruction->line,
+        $instruction->handler,
+        -1,
+        $instruction->invocationTarget,
+    );
+    expect(static fn() => Verifier::verify($body->replace(0, $negativeOriginalIndex)))
+        ->toThrow(RuntimeException::class, 'negative original index');
 });
 
 it('deduplicates literals and emits static-call name pairs', function (): void {

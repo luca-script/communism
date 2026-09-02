@@ -12,8 +12,12 @@ use Communism\Internals\Needle\Operand;
 use Communism\Mixin\CallbackInfo;
 use Communism\Mixin\CallbackInfoReturnable;
 use Communism\Mixin\At;
+use Communism\Mixin\Desc;
 use Communism\Mixin\Group;
 use Communism\Mixin\Inject;
+use Communism\Mixin\InjectionConflictException;
+use Communism\Mixin\InjectionException;
+use Communism\Mixin\ReferenceMap;
 use Zendful\Internals\Natives;
 use Zendful\Zendful;
 
@@ -33,6 +37,7 @@ final class DecompilerCallableCoverageTarget
 final class NeedleFixture
 {
     public string $member = '';
+    public At $objectMember;
 
     public function greet(string $name): string
     {
@@ -52,6 +57,11 @@ final class NeedleFixture
     public function setMember(): void
     {
         $this->member = 'needle';
+    }
+
+    public function setObjectMember(): void
+    {
+        $this->objectMember = new At('HEAD');
     }
 
     public function localAssign(string $value): string
@@ -247,13 +257,73 @@ it('locates declarative assignment, return, and invocation anchors', function ()
     expect($calls[0]->action)->toBe('before');
 });
 
+it('filters field anchors by PHP-shaped descriptors', function (): void {
+    $body = Decompiler::decompile(NeedleFixture::class . '::setMember');
+
+    expect(Matcher::find($body, new At('FIELD', '::member:string')))->toHaveCount(1)
+        ->and(Matcher::find($body, new At('FIELD', '::member:int')))->toHaveCount(0);
+    expect(Matcher::find($body, new At('FIELD', ['::renamedMember', ['aliases' => ['::member']]])))->toHaveCount(1);
+
+    $objectBody = Decompiler::decompile(NeedleFixture::class . '::setObjectMember');
+    expect(Matcher::find($objectBody, new At('FIELD', '::objectMember:Communism/Mixin/At')))->toHaveCount(1)
+        ->and(Matcher::find($objectBody, new At('FIELD', '::objectMember:Communism/Mixin/Inject')))->toHaveCount(0);
+});
+
+it('applies reusable external reference maps to field and invocation selectors', function (): void {
+    $fieldMap = new ReferenceMap(fields: ['::logicalMember' => '::member']);
+    $fieldBody = Decompiler::decompile(NeedleFixture::class . '::setMember');
+    expect(Matcher::find($fieldBody, new At('FIELD', '::logicalMember', referenceMap: $fieldMap)))->toHaveCount(1);
+
+    $invocationMap = new ReferenceMap(methods: ['->logicalTarget' => '->memberTarget']);
+    $invocationBody = Decompiler::decompile(NeedleCallFixture::class . '::callTargets');
+    expect(Matcher::find($invocationBody, new At('INVOKE', '->logicalTarget', referenceMap: $invocationMap)))->toHaveCount(1);
+});
+
+it('rejects malformed external reference-map entries', function (): void {
+    expect(fn(): ReferenceMap => new ReferenceMap(methods: ['logical target' => 'actual']))
+        ->toThrow(InvalidArgumentException::class, 'without whitespace')
+        ->and(fn(): ReferenceMap => new ReferenceMap(fields: ['::field' => '']))
+        ->toThrow(InvalidArgumentException::class, 'non-empty names');
+});
+
+it('rejects malformed field descriptors before matching', function (): void {
+    expect(fn(): array => Matcher::find(
+        Decompiler::decompile(NeedleFixture::class . '::setMember'),
+        new At('FIELD', '::member:'),
+    ))->toThrow(InvalidArgumentException::class, 'descriptor must not be empty');
+    expect(fn(): array => Matcher::find(
+        Decompiler::decompile(NeedleFixture::class . '::setMember'),
+        new At('FIELD', ['::member', ['aliases' => []]]),
+    ))->toThrow(InvalidArgumentException::class, 'non-empty list');
+});
+
 it('matches wildcard global, static, and member invocation selectors', function (): void {
     $body = Decompiler::decompile(NeedleCallFixture::class . '::callTargets');
 
     expect(Matcher::find($body, new At('INVOKE', '*')))->toHaveCount(0)
         ->and(Matcher::find($body, new At('INVOKE', 'NeedleCallTarget::*')))->toHaveCount(1)
         ->and(Matcher::find($body, new At('INVOKE', '::*')))->toHaveCount(1)
-        ->and(Matcher::find($body, new At('INVOKE', '->*')))->toHaveCount(1);
+        ->and(Matcher::find($body, new At('INVOKE', '->*')))->toHaveCount(1)
+        ->and(Matcher::find($body, new At('INVOKE', ['->memberTargetRenamed', ['aliases' => ['memberTarget']]])))->toHaveCount(1);
+});
+
+it('filters invocation anchors by reflected PHP signatures', function (): void {
+    $body = Decompiler::decompile(NeedleFixture::class . '::invoke');
+
+    expect(Matcher::find($body, new At('INVOKE', ['strtoupper', ['signature' => ['parameters' => ['string'], 'return' => 'string']]])))->not->toBeEmpty()
+        ->and(Matcher::find($body, new At('INVOKE', ['strtoupper', ['signature' => ['parameters' => ['int'], 'return' => 'string']]])))->toBeEmpty();
+});
+
+it('accepts Desc objects as PHP-shaped invocation selectors', function (): void {
+    $body = Decompiler::decompile(NeedleFixture::class . '::invoke');
+
+    expect(Matcher::find($body, new At('INVOKE', new Desc('strtoupper', args: ['string'], returnType: 'string'))))->toHaveCount(1)
+        ->and(Matcher::find($body, new At('INVOKE', new Desc('strtoupper', args: ['int'], returnType: 'string'))))->toHaveCount(0);
+});
+
+it('rejects empty Desc selectors and type names', function (): void {
+    expect(fn(): Desc => new Desc(''))->toThrow(InvalidArgumentException::class, 'non-empty selector')
+        ->and(fn(): Desc => new Desc('strtoupper', args: ['']))->toThrow(InvalidArgumentException::class, 'non-empty PHP names');
 });
 
 it('resolves every supported injection point type', function (): void {
@@ -317,16 +387,20 @@ it('rejects malformed injection and rewrite callbacks', function (): void {
         ->toThrow(InvalidArgumentException::class, 'must return a MethodBody');
 });
 
-it('rejects conflicting replacement placements', function (): void {
+it('rejects conflicting replacement placements with structured ranges', function (): void {
     $body = Decompiler::decompile(NeedleFixture::class . '::greet');
     $handler = Decompiler::decompile(NeedleFixture::class . '::valueReturn');
     $inject = new Inject('greet', new At('RETURN', action: 'replace'));
 
-    expect(fn(): MethodBody => Injector::inject(
-        $body,
-        [$inject, $inject],
-        static fn(): MethodBody => $handler,
-    ))->toThrow(InvalidArgumentException::class, 'same spot');
+    try {
+        Injector::inject($body, [$inject, $inject], static fn(): MethodBody => $handler);
+        throw new RuntimeException('Expected a placement conflict');
+    } catch (InjectionConflictException $exception) {
+        expect($exception->kind)->toBe('duplicate-replacement')
+            ->and($exception->firstStart)->toBe($exception->secondStart)
+            ->and($exception->firstEnd)->toBe($exception->secondEnd)
+            ->and($exception->getMessage())->toContain('same spot');
+    }
 });
 
 it('merges before and replacement placements at one anchor', function (): void {
@@ -414,8 +488,28 @@ it('supports Mixin-style injection metadata and match-count guarantees', functio
 
     $body = Decompiler::decompile(NeedleFixture::class . '::greet');
     expect(Injector::resolve($body, [$inject]))->toHaveCount(1);
-    expect(fn(): array => Injector::resolve($body, [new Inject('greet', new At('RETURN'), true, 3)]))
-        ->toThrow(InvalidArgumentException::class, 'requires at least 3');
+    try {
+        Injector::resolve(
+            $body,
+            [new Inject('greet', new At('RETURN'), true, 3)],
+            NeedleFixture::class,
+            static fn(Inject $inject): string => 'handler',
+        );
+        throw new RuntimeException('Expected the minimum match count to fail');
+    } catch (InjectionException $exception) {
+        expect($exception->point)->toBe('RETURN')
+            ->and($exception->targetMethod)->toBe('NeedleFixture::greet')
+            ->and($exception->matched)->toBe(2)
+            ->and($exception->minimum)->toBe(3)
+            ->and($exception->maximum)->toBeNull()
+            ->and($exception->expected)->toBeNull()
+            ->and($exception->mixinClass)->toBe(NeedleFixture::class)
+            ->and($exception->handlerMethod)->toBe('handler')
+            ->and($exception->resolvedInstruction)->toBe('RETURN')
+            ->and($exception->slice)->toBeNull()
+            ->and($exception->selector)->toBe('RETURN')
+            ->and($exception->getMessage())->toContain('requires at least 3');
+    }
     expect(fn(): array => Injector::resolve($body, [new Inject('greet', new At('RETURN'), true, null, 1)]))
         ->toThrow(InvalidArgumentException::class, 'expects 1');
     expect(fn(): array => Injector::resolve($body, [new Inject('greet', new At('RETURN'), true, null, null, 0)]))
@@ -475,9 +569,19 @@ it('validates slices, groups, and safe shift distances before rewriting', functi
 
     expect(fn(): Group => new Group('invalid', 2, 1))
         ->toThrow(InvalidArgumentException::class, '0 <= min <= max');
-    expect(fn(): array => Injector::resolve($body, [
-        new Inject('invokeTwice', new At('INVOKE', 'strtoupper'), true, null, null, null, null, null, new Group('calls', 3)),
-    ]))->toThrow(InvalidArgumentException::class, 'Injection group calls');
+    try {
+        Injector::resolve($body, [
+            new Inject('invokeTwice', new At('INVOKE', 'strtoupper'), true, null, null, null, null, null, new Group('calls', 3)),
+        ]);
+        throw new RuntimeException('Expected the injection group count to fail');
+    } catch (InjectionException $exception) {
+        expect($exception->point)->toBe('group:calls')
+            ->and($exception->targetMethod)->toBe('NeedleFixture::invokeTwice')
+            ->and($exception->matched)->toBe(2)
+            ->and($exception->minimum)->toBe(3)
+            ->and($exception->maximum)->toBe(PHP_INT_MAX)
+            ->and($exception->getMessage())->toContain('Injection group calls');
+    }
 });
 
 it('rejects malformed injection-point declarations at the matcher boundary', function (): void {

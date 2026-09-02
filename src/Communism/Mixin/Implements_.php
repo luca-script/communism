@@ -18,39 +18,30 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: Implements_.php                                                      *
+ * Consumer: Users                                                            *
+ * Purpose: Source file for Implements_.php.                                  *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+use Attribute;
+
+/** Declares one or more interfaces whose methods a mixin supplies. */
+#[Attribute(Attribute::TARGET_CLASS)]
+final class Implements_
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
+    /** @var list<Interface_> */
+    public readonly array $interfaces;
 
-    public function accessorGet(): mixed
+    public function __construct(Interface_ ...$interfaces)
     {
-        return $this->accessorPlaceholder;
-    }
+        if ($interfaces === []) {
+            throw new \InvalidArgumentException('Implements_ requires at least one Interface_ declaration');
+        }
 
-    public function accessorSet(mixed $value): void
-    {
-        $this->accessorPlaceholder = $value;
+        $this->interfaces = array_values($interfaces);
     }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
 }

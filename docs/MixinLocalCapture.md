@@ -22,4 +22,5 @@ The policies are:
 All capture failures are handled before the rewritten opcode body is installed.
 When a callback cannot capture its requested locals, Needle can select a
 `#[Surrogate]` method named `<handler>Surrogate` with a compatible signature.
-Full JVM-style local-frame and stack inspection remain internal Needle work.
+Full VM-local-frame and stack inspection remain internal Needle work; this
+project does not expose JVM descriptors or JVM compatibility as an API goal.

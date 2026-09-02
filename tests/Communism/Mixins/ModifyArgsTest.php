@@ -10,9 +10,12 @@ use Communism\Internals\Needle\Decompiler;
 use Communism\Internals\Needle\Instruction;
 use Communism\Reflect\ReflectionClass;
 
-function modifyArgsJoin(int $first, string $second): string
+function modifyArgsJoin(mixed ...$values): string
 {
-    return $first . $second;
+    if (!isset($values[0], $values[1]) || !is_scalar($values[0]) || !is_scalar($values[1])) {
+        throw new InvalidArgumentException('Expected two scalar values');
+    }
+    return sprintf('%s%s', $values[0], $values[1]);
 }
 
 #[Mixin(ModifyArgsTarget::class)]
@@ -309,10 +312,182 @@ final class DynamicModifyArgsSetAllTarget
     }
 }
 
-it('rejects dynamic ModifyArgs setAll values before mutation', function (): void {
-    expect(function (): void {
-        (new ReflectionClass(DynamicModifyArgsSetAllTarget::class))->inject(DynamicModifyArgsSetAllMixin::class);
+it('lowers a statically known ModifyArgs setAll local without constructing Args', function (): void {
+    (new ReflectionClass(DynamicModifyArgsSetAllTarget::class))->inject(DynamicModifyArgsSetAllMixin::class);
+
+    expect((new DynamicModifyArgsSetAllTarget())->run(2, 'original'))->toBe('10!');
+});
+
+/** @return array<int, mixed> */
+function runtimeModifyArgsValues(): array
+{
+    return [10, '!'];
+}
+
+#[Mixin(RuntimeModifyArgsSetAllTarget::class)]
+final class RuntimeModifyArgsSetAllMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsJoin'))]
+    public function runtimeSetAll(Args $args): void
+    {
+        $values = runtimeModifyArgsValues();
+        $args->setAll($values);
+    }
+}
+
+final class RuntimeModifyArgsSetAllTarget
+{
+    public function run(int $first, string $second): string
+    {
+        return modifyArgsJoin($first, $second);
+    }
+}
+
+it('rejects runtime-built ModifyArgs setAll lists before mutation', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(RuntimeModifyArgsSetAllTarget::class))->inject(RuntimeModifyArgsSetAllMixin::class);
     })->toThrow(InvalidArgumentException::class, 'statically known list of values');
 
-    expect((new DynamicModifyArgsSetAllTarget())->run(2, 'original'))->toBe('2original');
+    expect((new RuntimeModifyArgsSetAllTarget())->run(2, 'original'))->toBe('2original');
+});
+
+final class ModifyArgsEvaluationOrder
+{
+    /** @var list<string> */
+    public static array $values = [];
+}
+
+function modifyArgsOrderedValue(string $value): int
+{
+    ModifyArgsEvaluationOrder::$values[] = $value;
+
+    return count(ModifyArgsEvaluationOrder::$values);
+}
+
+function modifyArgsJoinOrdered(mixed ...$values): string
+{
+    return implode(',', array_map(static function (mixed $value): string {
+        if (!is_scalar($value)) {
+            throw new InvalidArgumentException('Expected scalar value');
+        }
+        return sprintf('%s', $value);
+    }, $values));
+}
+
+#[Mixin(ModifyArgsEvaluationTarget::class)]
+final class ModifyArgsEvaluationMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsJoinOrdered'))]
+    public function rewriteInSourceOrder(Args $args): void
+    {
+        $args->setAll([modifyArgsOrderedValue('first'), 20, modifyArgsOrderedValue('third')]);
+    }
+}
+
+final class ModifyArgsEvaluationTarget
+{
+    public function run(int $first, int $second, int $third): string
+    {
+        return modifyArgsJoinOrdered($first, $second, $third);
+    }
+}
+
+it('evaluates variable setAll values from left to right', function (): void {
+    ModifyArgsEvaluationOrder::$values = [];
+    (new ReflectionClass(ModifyArgsEvaluationTarget::class))->inject(ModifyArgsEvaluationMixin::class);
+
+    expect((new ModifyArgsEvaluationTarget())->run(1, 2, 3))->toBe('1,20,2')
+        ->and(ModifyArgsEvaluationOrder::$values)->toBe(['first', 'third']);
+});
+
+function modifyArgsFixedJoin(int $first, string $second): string
+{
+    return $first . $second;
+}
+
+#[Mixin(ModifyArgsFixedValuesTarget::class)]
+final class ModifyArgsFixedValuesMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsFixedJoin'))]
+    public function rewriteFixedValues(Args $args): void
+    {
+        $args->setAll([modifyArgsOrderedValue('fixed'), '!']);
+    }
+}
+
+final class ModifyArgsFixedValuesTarget
+{
+    public function run(int $first, string $second): string
+    {
+        return modifyArgsFixedJoin($first, $second);
+    }
+}
+
+it('allows variable setAll values for fixed-arity invocations when length is known', function (): void {
+    ModifyArgsEvaluationOrder::$values = [];
+    (new ReflectionClass(ModifyArgsFixedValuesTarget::class))->inject(ModifyArgsFixedValuesMixin::class);
+
+    expect((new ModifyArgsFixedValuesTarget())->run(1, 'original'))->toBe('1!')
+        ->and(ModifyArgsEvaluationOrder::$values)->toBe(['fixed']);
+});
+
+#[Mixin(ModifyArgsWrongLengthTarget::class)]
+final class ModifyArgsWrongLengthMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsJoin'))]
+    public function rewriteWrongLength(Args $args): void
+    {
+        $args->setAll([10]);
+    }
+}
+
+final class ModifyArgsWrongLengthTarget
+{
+    public function run(int $first, string $second): string
+    {
+        return modifyArgsJoin($first, $second);
+    }
+}
+
+it('rejects a known setAll length mismatch before mutation', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(ModifyArgsWrongLengthTarget::class))->inject(ModifyArgsWrongLengthMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'exactly one value per argument');
+
+    expect((new ModifyArgsWrongLengthTarget())->run(2, 'original'))->toBe('2original');
+});
+
+#[Mixin(OperandModifyArgsSetAllTarget::class)]
+final class OperandModifyArgsSetAllMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsJoin'))]
+    public function copyFirstArgument(Args $args): void
+    {
+        $values = [$args->get(0), '!'];
+        $args->setAll($values);
+    }
+}
+
+final class OperandModifyArgsSetAllTarget
+{
+    public function run(int $first, string $second): string
+    {
+        return modifyArgsJoin($first, $second);
+    }
+}
+
+it('lowers setAll arrays containing lowered Args operands', function (): void {
+    (new ReflectionClass(OperandModifyArgsSetAllTarget::class))->inject(OperandModifyArgsSetAllMixin::class);
+
+    expect((new OperandModifyArgsSetAllTarget())->run(2, 'original'))->toBe('2!');
 });

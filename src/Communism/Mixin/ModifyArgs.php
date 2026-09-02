@@ -34,5 +34,5 @@ use Attribute;
 final class ModifyArgs
 {
     /** @param At $at */
-    public function __construct(public readonly string $method, public readonly At $at) {}
+    public function __construct(public readonly string $method, public readonly At $at, public readonly ?Slice $slice = null) {}
 }

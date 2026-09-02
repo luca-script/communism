@@ -32,5 +32,19 @@ use Attribute;
 #[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_METHOD)]
 final class Shadow
 {
-    public function __construct(public readonly ?string $target = null) {}
+    public function __construct(
+        public readonly ?string $target = null,
+        public readonly string $prefix = '',
+        /** @var list<string> */
+        public readonly array $aliases = [],
+    ) {
+        if ($target !== null && $prefix !== '') {
+            throw new \InvalidArgumentException('Shadow target and prefix are mutually exclusive');
+        }
+        foreach ($aliases as $alias) {
+            if ($alias === '') {
+                throw new \InvalidArgumentException('Shadow aliases must not be empty');
+            }
+        }
+    }
 }

@@ -33,5 +33,15 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD)]
 final class Overwrite
 {
-    public function __construct(public readonly ?string $method = null) {}
+    /** @param list<string> $aliases */
+    public function __construct(
+        public readonly ?string $method = null,
+        public readonly array $aliases = [],
+    ) {
+        foreach ($aliases as $alias) {
+            if ($alias === '') {
+                throw new \InvalidArgumentException('Overwrite aliases must not be empty');
+            }
+        }
+    }
 }

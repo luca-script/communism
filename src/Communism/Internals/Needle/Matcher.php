@@ -28,8 +28,11 @@ declare(strict_types=1);
 namespace Communism\Internals\Needle;
 
 use Communism\Mixin\At;
+use Communism\Mixin\Desc;
 use Communism\Mixin\Slice;
 use InvalidArgumentException;
+use ReflectionFunction;
+use ReflectionMethod;
 
 use function in_array;
 use function is_array;
@@ -108,7 +111,7 @@ final class Matcher
 
             case 'INVOKE':
                 $target = $at->target;
-                if (!is_string($target) && !is_array($target)) {
+                if (!is_string($target) && !is_array($target) && !$target instanceof Desc) {
                     throw new InvalidArgumentException('INVOKE expects an invocation target specification');
                 }
                 if (!in_array($action, ['before', 'after', 'replace'], true)) {
@@ -119,7 +122,7 @@ final class Matcher
 
             case 'INVOKE_ASSIGN':
                 $target = $at->target;
-                if (!is_string($target) && !is_array($target)) {
+                if (!is_string($target) && !is_array($target) && !$target instanceof Desc) {
                     throw new InvalidArgumentException('INVOKE_ASSIGN expects an invocation target specification');
                 }
                 self::validateAction($type, $action, ['after']);
@@ -141,10 +144,10 @@ final class Matcher
                 return;
 
             case 'FIELD':
-                if (!is_string($at->target)) {
+                if (!is_string($at->target) && !is_array($at->target)) {
                     throw new InvalidArgumentException('FIELD expects a member name target');
                 }
-                self::validateAssignmentTarget($at->target);
+                self::fieldTargets($at->target);
                 self::validateAction($type, $action, ['replace']);
                 return;
 
@@ -191,6 +194,9 @@ final class Matcher
         ?Slice $slice = null,
         ?string $constantType = null,
         ?int $variableIndex = null,
+        ?string $variableType = null,
+        bool $constantNull = false,
+        bool $variableArgsOnly = false,
     ): array {
         self::validateAt($at);
         if ($argumentIndex !== null && ($argumentIndex < 0 || $at->type() !== 'INVOKE')) {
@@ -203,7 +209,7 @@ final class Matcher
             throw new InvalidArgumentException('A constant type discriminator requires a CONSTANT point');
         }
 
-        $matches = self::findUnbounded($body, $at, $argumentIndex, $constantType, $variableIndex);
+        $matches = self::findUnbounded($body, $at, $argumentIndex, $constantType, $variableIndex, $variableType, $constantNull, $variableArgsOnly);
         $matches = self::selectOrdinal($matches, $at->ordinal);
         $matches = self::shift($body, $at, $matches);
         if ($slice !== null) {
@@ -226,7 +232,10 @@ final class Matcher
         At $at,
         ?int $argumentIndex,
         ?string $constantType,
-        ?int $variableIndex,
+        ?int $variableIndex = null,
+        ?string $variableType = null,
+        bool $constantNull = false,
+        bool $variableArgsOnly = false,
     ): array {
         self::validateAt($at);
         $type = match ($at->type()) {
@@ -299,7 +308,10 @@ final class Matcher
 
         if (in_array($type, ['invoke', 'invoke_assign'], true)) {
             $target = $at->target;
-            if (!is_string($target) && !is_array($target)) {
+            if ($at->referenceMap !== null && (is_string($target) || is_array($target) || $target instanceof Desc)) {
+                $target = $at->referenceMap->invocation($target);
+            }
+            if (!is_string($target) && !is_array($target) && !$target instanceof Desc) {
                 // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('INVOKE expects an invocation target specification');
                 // @codeCoverageIgnoreEnd
@@ -338,6 +350,17 @@ final class Matcher
                     continue;
                 }
                 $matches[] = new MatchResult($index, $matchEnd, $type, $action, $spec, $argumentIndex);
+            }
+
+            if (!$spec->hasMinimumMatches(count($matches))) {
+                throw new InvalidArgumentException(sprintf(
+                    'Invocation selector %s matched %d target(s), outside its quantifier bounds',
+                    $at->description(),
+                    count($matches),
+                ));
+            }
+            if ($spec->maxMatches !== null && count($matches) > $spec->maxMatches) {
+                $matches = array_slice($matches, 0, $spec->maxMatches);
             }
 
             return $matches;
@@ -386,7 +409,11 @@ final class Matcher
                 $matches[] = new MatchResult($index, $index + 1, $type, $action);
             } elseif ($type === 'field') {
                 $fieldMode = self::fieldMode($instruction);
-                if (self::matchesField($instruction, $at->target, $fieldMode, $at->opcode)) {
+                $target = $at->target;
+                if ($at->referenceMap !== null && (is_string($target) || is_array($target))) {
+                    $target = $at->referenceMap->fieldTarget($target);
+                }
+                if (self::matchesField($body, $instruction, $target, $fieldMode, $at->opcode)) {
                     $matches[] = new MatchResult(
                         $index,
                         $index + (in_array($fieldMode, ['write', 'array-write'], true) ? self::assignmentLength($body, $index) : 1),
@@ -400,9 +427,9 @@ final class Matcher
                 }
             } elseif ($type === 'throw' && self::matchesThrow($body, $index, $at->target)) {
                 $matches[] = new MatchResult($index, $index + 1, $type, $action);
-            } elseif ($type === 'constant' && self::matchesConstant($instruction, $at->target, $constantType)) {
+            } elseif ($type === 'constant' && self::matchesConstant($instruction, $at->target, $constantType, $constantNull)) {
                 $matches[] = new MatchResult($index, $index + 1, $type, $action);
-            } elseif ($type === 'variable' && self::matchesVariable($body, $instruction, $at->target, $variableMode, $variableIndex)) {
+            } elseif ($type === 'variable' && self::matchesVariable($body, $index, $instruction, $at->target, $variableMode, $variableIndex, $variableType, $variableArgsOnly)) {
                 $matches[] = new MatchResult($index, $index + 1, $type, $action, null, null, $variableMode);
             }
         }
@@ -522,6 +549,12 @@ final class Matcher
             throw new InvalidArgumentException('A field member name must not be empty');
             // @codeCoverageIgnoreEnd
         }
+        if (str_starts_with($target, '::')) {
+            [, $descriptor] = self::fieldTarget($target);
+            if ($descriptor === '') {
+                throw new InvalidArgumentException('A field descriptor must not be empty');
+            }
+        }
     }
 
     private static function fieldMode(Instruction $instruction): string
@@ -534,8 +567,33 @@ final class Matcher
         };
     }
 
-    private static function matchesField(Instruction $instruction, mixed $target, string $mode, string $opcode = ''): bool
-    {
+    private static function matchesField(
+        MethodBody|Instruction $bodyOrInstruction,
+        mixed $instructionOrTarget,
+        mixed $targetOrMode,
+        string $modeOrOpcode = '',
+        string $opcode = '',
+    ): bool {
+        $body = $bodyOrInstruction instanceof MethodBody ? $bodyOrInstruction : null;
+        $instruction = $bodyOrInstruction instanceof Instruction ? $bodyOrInstruction : $instructionOrTarget;
+        $target = $bodyOrInstruction instanceof Instruction ? $instructionOrTarget : $targetOrMode;
+        $mode = $bodyOrInstruction instanceof Instruction ? $targetOrMode : $modeOrOpcode;
+        $opcode = $bodyOrInstruction instanceof Instruction ? $modeOrOpcode : $opcode;
+        if (!$instruction instanceof Instruction || !is_string($mode)) {
+            return false;
+        }
+        if (is_array($target)) {
+            if ($body === null) {
+                return false;
+            }
+            foreach (self::fieldTargets($target) as $candidate) {
+                if (self::matchesField($body, $instruction, $candidate, $mode, $opcode)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
         if ($opcode !== '') {
             $opcode = strtoupper($opcode);
             $expectedMode = match ($opcode) {
@@ -555,7 +613,10 @@ final class Matcher
         if (!is_string($target) || !str_starts_with($target, '::')) {
             return false;
         }
-        $member = substr($target, 2);
+        [$member, $descriptor] = self::fieldTarget($target);
+        if ($descriptor !== null && ($body === null || !self::matchesFieldDescriptor($body, $member, $descriptor))) {
+            return false;
+        }
         if ($mode === 'write') {
             return $instruction->name === 'ASSIGN_OBJ'
                 && $instruction->operand2->kind === Operand::CONSTANT
@@ -565,6 +626,81 @@ final class Matcher
         return in_array($instruction->name, ['FETCH_OBJ_R', 'FETCH_OBJ_W', 'FETCH_OBJ_IS'], true)
             && $instruction->operand2->kind === Operand::CONSTANT
             && $instruction->operand2->value === $member;
+    }
+
+    /** @return list<string> */
+    private static function fieldTargets(mixed $target): array
+    {
+        if (is_string($target)) {
+            self::validateAssignmentTarget($target);
+
+            return [$target];
+        }
+        if (!is_array($target) || !is_string($target[0] ?? null) || count($target) > 2) {
+            throw new InvalidArgumentException('FIELD aliases must start with a member target');
+        }
+
+        $targets = [$target[0]];
+        self::validateAssignmentTarget($target[0]);
+        $extension = $target[1] ?? null;
+        if ($extension === null) {
+            return $targets;
+        }
+        if (!is_array($extension) || count($extension) !== 1 || !array_key_exists('aliases', $extension)) {
+            throw new InvalidArgumentException('Unknown FIELD selector extension; expected ["aliases" => NAME_LIST]');
+        }
+        $aliases = $extension['aliases'];
+        if (!is_array($aliases) || !array_is_list($aliases) || $aliases === []) {
+            throw new InvalidArgumentException('FIELD ALIASES must be a non-empty list of member targets');
+        }
+        foreach ($aliases as $alias) {
+            if (!is_string($alias)) {
+                throw new InvalidArgumentException('FIELD ALIASES must contain member targets');
+            }
+            self::validateAssignmentTarget($alias);
+            $targets[] = $alias;
+        }
+
+        return $targets;
+    }
+
+    /** @return array{string, ?string} */
+    private static function fieldTarget(string $target): array
+    {
+        $target = substr($target, 2);
+        $separator = strpos($target, ':');
+        if ($separator === false) {
+            return [$target, null];
+        }
+
+        return [substr($target, 0, $separator), substr($target, $separator + 1)];
+    }
+
+    private static function matchesFieldDescriptor(MethodBody $body, string $member, string $descriptor): bool
+    {
+        if (!str_contains($body->name, '::')) {
+            return false;
+        }
+
+        [$class] = explode('::', $body->name, 2);
+        if (!class_exists($class)) {
+            return false;
+        }
+        try {
+            $property = new \ReflectionProperty($class, $member);
+        } catch (\ReflectionException) {
+            return false;
+        }
+        $type = $property->getType();
+        if (!$type instanceof \ReflectionNamedType) {
+            return false;
+        }
+
+        $actual = strtolower($type->getName());
+        $descriptor = strtolower($descriptor);
+        $descriptor = str_replace('/', '\\', $descriptor);
+
+        return $actual === $descriptor;
     }
 
     private static function assignmentLength(MethodBody $body, int $index): int
@@ -594,11 +730,11 @@ final class Matcher
         return false;
     }
 
-    private static function matchesConstant(Instruction $instruction, mixed $target, ?string $type): bool
+    private static function matchesConstant(Instruction $instruction, mixed $target, ?string $type, bool $nullValue = false): bool
     {
         foreach ([$instruction->result, $instruction->operand1, $instruction->operand2] as $operand) {
             if ($operand->kind === Operand::CONSTANT
-                && ($target === '' || $operand->value === $target)
+                && (($nullValue && $operand->value === null) || (!$nullValue && ($target === '' || $operand->value === $target)))
                 && self::matchesConstantType($operand->value, $type)
             ) {
                 return true;
@@ -610,20 +746,38 @@ final class Matcher
 
     private static function matchesVariable(
         MethodBody $body,
-        Instruction $instruction,
-        mixed $name,
-        string $mode,
-        ?int $variableIndex,
+        int|Instruction $indexOrInstruction,
+        Instruction|string $instructionOrName,
+        mixed $nameOrMode,
+        string|int|null $modeOrIndex,
+        ?int $variableIndex = null,
+        ?string $variableType = null,
+        bool $variableArgsOnly = false,
     ): bool {
-        $matchesOperand = static function (Operand $operand) use ($body, $name, $variableIndex): bool {
+        $legacy = $indexOrInstruction instanceof Instruction;
+        $instructionIndex = $legacy ? 0 : $indexOrInstruction;
+        $instruction = $legacy ? $indexOrInstruction : $instructionOrName;
+        $name = $legacy ? $instructionOrName : $nameOrMode;
+        $mode = $legacy ? $nameOrMode : $modeOrIndex;
+        $variableIndex = $legacy ? (is_int($modeOrIndex) ? $modeOrIndex : null) : $variableIndex;
+        if (!$instruction instanceof Instruction || !is_string($name) || !is_string($mode)) {
+            return false;
+        }
+        $matchesOperand = static function (Operand $operand) use ($body, $instructionIndex, $name, $variableIndex, $variableType, $variableArgsOnly): bool {
             if (!in_array($operand->kind, [Operand::CV, Operand::VARIABLE], true)) {
                 return false;
             }
             if ($variableIndex !== null && $body->variableIndex($operand) !== $variableIndex) {
                 return false;
             }
+            if ($variableType !== null && !self::matchesVariableTypeAt($body, $operand, $variableType, $instructionIndex)) {
+                return false;
+            }
+            if ($variableArgsOnly && !self::isArgumentVariable($body, $operand)) {
+                return false;
+            }
 
-            return $name === '' || (is_string($name) && $body->variableName($operand) === $name);
+            return $name === '' || $body->variableName($operand) === $name;
         };
 
         if ($mode === 'store') {
@@ -631,10 +785,31 @@ final class Matcher
                 return false;
             }
 
-            return $matchesOperand($instruction->result) || $matchesOperand($instruction->operand1);
+            if ($matchesOperand($instruction->result)) {
+                return true;
+            }
+            // PHP 8.4 represents an ordinary CV assignment as
+            // ASSIGN <target>, <value>. The target has no declared type of
+            // its own, so a typed ModifyVariable may use the value operand's
+            // known type (for example, $local = $typedParameter).
+            if ($instruction->operand1->kind === Operand::CV
+                && ($name === '' || $body->variableName($instruction->operand1) === $name)
+                && ($variableIndex === null || $body->variableIndex($instruction->operand1) === $variableIndex)
+                && (!$variableArgsOnly || self::isArgumentVariable($body, $instruction->operand1))
+            ) {
+                return $variableType === null || self::matchesValueType($body, $instruction->operand2, $variableType);
+            }
+
+            return false;
         }
 
         if ($instruction->name === 'ASSIGN' || str_starts_with($instruction->name, 'RECV')) {
+            return false;
+        }
+        // Return-type verification consumes a CV as metadata, not as a
+        // value load. Treating it as LOAD would rewrite the verifier and can
+        // leave the actual RETURN with an uninitialised result.
+        if ($instruction->name === 'VERIFY_RETURN_TYPE') {
             return false;
         }
         foreach ([$instruction->operand1, $instruction->operand2] as $operand) {
@@ -647,6 +822,155 @@ final class Matcher
         }
 
         return false;
+    }
+
+    private static function isArgumentVariable(MethodBody $body, Operand $operand): bool
+    {
+        foreach ($body->instructions() as $instruction) {
+            if (str_starts_with($instruction->name, 'RECV')
+                && $instruction->result->kind === $operand->kind
+                && $instruction->result->value === $operand->value
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function matchesVariableType(MethodBody $body, Operand $operand, string $type): bool
+    {
+        $actual = $body->variableType($operand);
+        if ($actual === null || $type === 'mixed') {
+            // Zend bytecode does not retain an inferred type for every local.
+            // Unknown locals remain eligible; known declarations and literal
+            // assignments are filtered strictly below.
+            return true;
+        }
+        if ($type === 'object') {
+            return $actual === 'object' || !in_array($actual, ['int', 'float', 'string', 'bool', 'array', 'null'], true);
+        }
+
+        return $actual === $type;
+    }
+
+    private static function matchesVariableTypeAt(MethodBody $body, Operand $operand, string $type, int $before): bool
+    {
+        $actual = self::inferredVariableType($body, $operand, $before);
+        if ($actual === null || $type === 'mixed') {
+            return true;
+        }
+        if ($type === 'object') {
+            return $actual === 'object' || !in_array($actual, ['int', 'float', 'string', 'bool', 'array', 'null'], true);
+        }
+
+        return $actual === $type;
+    }
+
+    private static function inferredVariableType(MethodBody $body, Operand $operand, int $before): ?string
+    {
+        $declared = $body->variableType($operand);
+        if ($declared !== null) {
+            return $declared;
+        }
+        if ($operand->kind === Operand::CONSTANT) {
+            return match (get_debug_type($operand->value)) {
+                'integer' => 'int',
+                'double' => 'float',
+                'boolean' => 'bool',
+                default => get_debug_type($operand->value),
+            };
+        }
+        if (!in_array($operand->kind, [Operand::CV, Operand::TEMPORARY], true)) {
+            return null;
+        }
+
+        for ($index = $before - 1; $index >= 0; $index--) {
+            $instruction = $body->instruction($index);
+            $produces = $instruction->result->kind === $operand->kind
+                && $instruction->result->value === $operand->value;
+            if ($operand->kind === Operand::CV) {
+                $produces = $instruction->name === 'ASSIGN'
+                    && $instruction->operand1->kind === Operand::CV
+                    && $instruction->operand1->value === $operand->value;
+            }
+            if (!$produces) {
+                continue;
+            }
+            $type = self::inferredInstructionType($body, $instruction, $index);
+            if ($type !== null) {
+                return $type;
+            }
+            break;
+        }
+
+        // A local may be assigned on more than one control-flow path. When
+        // no dominating assignment is available, accept a type only when all
+        // statically known assignments agree; conflicting paths remain
+        // unknown rather than producing an unsafe match.
+        $types = [];
+        foreach ($body->instructions() as $index => $instruction) {
+            $produces = $instruction->result->kind === $operand->kind
+                && $instruction->result->value === $operand->value;
+            if ($operand->kind === Operand::CV) {
+                $produces = $instruction->name === 'ASSIGN'
+                    && $instruction->operand1->kind === Operand::CV
+                    && $instruction->operand1->value === $operand->value;
+            }
+            if (!$produces) {
+                continue;
+            }
+            $type = self::inferredInstructionType($body, $instruction, $index);
+            if ($type !== null) {
+                $types[$type] = true;
+            }
+        }
+
+        return count($types) === 1 ? array_key_first($types) : null;
+    }
+
+    private static function inferredInstructionType(MethodBody $body, Instruction $instruction, int $index): ?string
+    {
+        if ($instruction->name === 'ASSIGN') {
+            return self::inferredVariableType($body, $instruction->operand2, $index);
+        }
+        if ($instruction->name === 'CONCAT') {
+            return 'string';
+        }
+        if (in_array($instruction->name, ['ADD', 'SUB', 'MUL', 'MOD', 'POW'], true)) {
+            $left = self::inferredVariableType($body, $instruction->operand1, $index);
+            $right = self::inferredVariableType($body, $instruction->operand2, $index);
+            if ($left === 'float' || $right === 'float') {
+                return 'float';
+            }
+            if ($left === 'int' && $right === 'int') {
+                return 'int';
+            }
+        }
+        if ($instruction->name === 'DIV') {
+            return 'float';
+        }
+        if (in_array($instruction->name, ['SL', 'SR', 'BW_AND', 'BW_OR', 'BW_XOR'], true)) {
+            $left = self::inferredVariableType($body, $instruction->operand1, $index);
+            $right = self::inferredVariableType($body, $instruction->operand2, $index);
+            if ($left === 'int' && $right === 'int') {
+                return 'int';
+            }
+        }
+        if (in_array($instruction->name, ['BOOL', 'BOOL_NOT', 'IS_EQUAL', 'IS_NOT_EQUAL', 'IS_IDENTICAL', 'IS_NOT_IDENTICAL', 'IS_SMALLER', 'IS_SMALLER_OR_EQUAL', 'TYPE_CHECK'], true)) {
+            return 'bool';
+        }
+
+        return null;
+    }
+
+    private static function matchesValueType(MethodBody $body, Operand $operand, string $type): bool
+    {
+        if ($operand->kind === Operand::CONSTANT) {
+            return self::matchesConstantType($operand->value, $type);
+        }
+
+        return self::matchesVariableType($body, $operand, $type);
     }
 
     private static function matchesConstantType(mixed $value, ?string $type): bool
@@ -765,15 +1089,17 @@ final class Matcher
             return $spec->kind === InvocationSpec::FUNCTION
                 && $init->operand1->kind === Operand::CONSTANT
                 && is_string($init->operand1->value)
-                && InvocationSpec::matchesName($init->operand1->value, $spec->name)
-                && $spec->acceptsArgumentCount(self::invocationArguments($body, $start, $end));
+                && self::matchesInvocationName($init->operand1->value, $spec)
+                && $spec->acceptsArgumentCount(self::invocationArguments($body, $start, $end))
+                && self::matchesInvocationSignature($body, $spec, $init->operand1->value, null);
         }
 
         if (preg_match('/^FRAMELESS_ICALL_[0-3]$/', $init->name) === 1) {
             return $spec->kind === InvocationSpec::FUNCTION
-                && (($init->invocationTarget !== null && InvocationSpec::matchesName($init->invocationTarget, $spec->name))
-                    || self::matchesFramelessFunction($body, $start, $spec->name))
-                && $spec->acceptsArgumentCount(self::invocationArguments($body, $start, $end));
+                && (($init->invocationTarget !== null && self::matchesInvocationName($init->invocationTarget, $spec))
+                    || self::matchesFramelessFunction($body, $start, $spec))
+                && $spec->acceptsArgumentCount(self::invocationArguments($body, $start, $end))
+                && self::matchesInvocationSignature($body, $spec, $init->invocationTarget ?? $spec->name, null);
         }
 
         $name = $init->operand1->kind === Operand::CONSTANT && is_string($init->operand1->value) ? $init->operand1->value : null;
@@ -784,23 +1110,63 @@ final class Matcher
             return false;
         }
 
-        return match ($spec->kind) {
+        $matched = match ($spec->kind) {
             InvocationSpec::FUNCTION => in_array($init->name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME'], true)
                 && $calledName !== null
-                && InvocationSpec::matchesName($calledName, $spec->name),
+                && self::matchesInvocationName($calledName, $spec),
             InvocationSpec::STATIC => $init->name === 'INIT_STATIC_METHOD_CALL'
                 && $member !== null
-                && InvocationSpec::matchesName($member, $spec->name)
+                && self::matchesInvocationName($member, $spec)
                 && ($spec->class === null || ($name !== null && InvocationSpec::matchesName($name, $spec->class))),
-            InvocationSpec::MEMBER => $init->name === 'INIT_METHOD_CALL' && $member !== null && InvocationSpec::matchesName($member, $spec->name),
+            InvocationSpec::MEMBER => $init->name === 'INIT_METHOD_CALL' && $member !== null && self::matchesInvocationName($member, $spec),
             default => false,
         };
+
+        if (!$matched) {
+            return false;
+        }
+
+        return self::matchesInvocationSignature($body, $spec, $calledName, $member);
     }
 
-    private static function matchesFramelessFunction(MethodBody $body, int $start, string $pattern): bool
+    private static function matchesInvocationSignature(MethodBody $body, InvocationSpec $spec, ?string $calledName, ?string $member): bool
+    {
+        if ($spec->signature === null) {
+            return true;
+        }
+        try {
+            if ($spec->kind === InvocationSpec::FUNCTION && $calledName !== null) {
+                return $spec->acceptsSignature(new ReflectionFunction($calledName));
+            }
+            if ($spec->kind === InvocationSpec::STATIC && $spec->class !== null && $member !== null) {
+                return $spec->acceptsSignature(new ReflectionMethod($spec->class, $member));
+            }
+            if ($spec->kind === InvocationSpec::MEMBER && $member !== null && str_contains($body->name, '::')) {
+                [$class] = explode('::', $body->name, 2);
+                return $spec->acceptsSignature(new ReflectionMethod($class, $member));
+            }
+        } catch (\ReflectionException) {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static function matchesInvocationName(string $actual, InvocationSpec $spec): bool
+    {
+        foreach ([$spec->name, ...$spec->aliases] as $pattern) {
+            if (InvocationSpec::matchesName($actual, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function matchesFramelessFunction(MethodBody $body, int $start, InvocationSpec $spec): bool
     {
         if ($body->instruction($start)->invocationTarget !== null) {
-            return InvocationSpec::matchesName($body->instruction($start)->invocationTarget, $pattern);
+            return self::matchesInvocationName($body->instruction($start)->invocationTarget, $spec);
         }
 
         for ($index = $start - 1; $index >= 0; $index--) {
@@ -808,7 +1174,7 @@ final class Matcher
             if ($instruction->name === 'JMP_FRAMELESS') {
                 return $instruction->operand1->kind === Operand::CONSTANT
                     && is_string($instruction->operand1->value)
-                    && InvocationSpec::matchesName($instruction->operand1->value, $pattern);
+                    && self::matchesInvocationName($instruction->operand1->value, $spec);
             }
 
         }

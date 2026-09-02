@@ -18,39 +18,33 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: Interface_.php                                                       *
+ * Consumer: Users                                                            *
+ * Purpose: Source file for Interface_.php.                                   *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+use Attribute;
+
+/** Describes a PHP interface method mapping for an Implements_ declaration. */
+#[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
+final class Interface_
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
-
-    public function accessorGet(): mixed
-    {
-        return $this->accessorPlaceholder;
+    /** @param class-string $interface */
+    public function __construct(
+        /** @var class-string */
+        public readonly string $interface,
+        public readonly string $prefix,
+        public readonly bool $unique = false,
+    ) {
+        if (!interface_exists($interface)) {
+            throw new \InvalidArgumentException(sprintf('Interface_ requires a declared interface, got %s', $interface));
+        }
+        if ($prefix === '' || preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $prefix) !== 1) {
+            throw new \InvalidArgumentException('Interface_ prefix must be a non-empty PHP identifier prefix');
+        }
     }
-
-    public function accessorSet(mixed $value): void
-    {
-        $this->accessorPlaceholder = $value;
-    }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
 }

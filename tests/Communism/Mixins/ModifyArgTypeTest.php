@@ -40,6 +40,75 @@ it('allows compatible numeric ModifyArg coercion with #[Coerce]', function (): v
     expect((new ModifyArgCoerceTarget())->value(2.5))->toBe(7.0);
 });
 
+function modifyArgStrictInt(int $value): int
+{
+    return $value * 2;
+}
+
+#[Mixin(ModifyArgNumericCastTarget::class)]
+final class ModifyArgNumericCastMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[ModifyArg('value', new At('INVOKE', 'modifyArgStrictInt'), 0)]
+    public function coerceFloat(float $value): float
+    {
+        return $value + 0.5;
+    }
+}
+
+final class ModifyArgNumericCastTarget
+{
+    public function value(int $value): int
+    {
+        return modifyArgStrictInt($value);
+    }
+}
+
+it('emits an explicit cast for a coerced numeric ModifyArg result', function (): void {
+    (new ReflectionClass(ModifyArgNumericCastTarget::class))->inject(ModifyArgNumericCastMixin::class);
+
+    expect((new ModifyArgNumericCastTarget())->value(2))->toBe(4);
+});
+
+/** @param array<int, mixed> $values */
+function modifyArgStrictArray(array $values): int
+{
+    return count($values);
+}
+
+#[Mixin(ModifyArgArrayCastTarget::class)]
+final class ModifyArgArrayCastMixin
+{
+    private function __construct() {}
+
+    /** @param iterable<int, mixed> $values
+     * @return iterable<int, mixed>
+     */
+    #[Coerce]
+    #[ModifyArg('value', new At('INVOKE', 'modifyArgStrictArray'), 0)]
+    public function coerceIterable(iterable $values): iterable
+    {
+        return $values;
+    }
+}
+
+final class ModifyArgArrayCastTarget
+{
+    /** @param array<int, mixed> $values */
+    public function value(array $values): int
+    {
+        return modifyArgStrictArray($values);
+    }
+}
+
+it('emits an explicit array cast for a coerced iterable ModifyArg result', function (): void {
+    (new ReflectionClass(ModifyArgArrayCastTarget::class))->inject(ModifyArgArrayCastMixin::class);
+
+    expect((new ModifyArgArrayCastTarget())->value([1, 2, 3]))->toBe(3);
+});
+
 function modifyArgTypedInt(int $value): int
 {
     return $value * 2;

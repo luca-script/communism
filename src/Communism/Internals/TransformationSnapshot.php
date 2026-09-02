@@ -18,39 +18,59 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
+ * File: TransformationSnapshot.php                                           *
  * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * Purpose: Persisted before/after transformed bytecode snapshots.            *
  *============================================================================*/
 
 declare(strict_types=1);
 
 namespace Communism\Internals;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+/** Immutable disassembly snapshot for one successful mixin transformation. */
+final readonly class TransformationSnapshot
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
+    /**
+     * @param array<string, string> $before
+     * @param array<string, string> $after
+     */
+    public function __construct(
+        public string $class,
+        public string $mixin,
+        public array $before,
+        public array $after,
+    ) {}
 
-    public function accessorGet(): mixed
+    /** @return list<string> */
+    public function changedMethods(): array
     {
-        return $this->accessorPlaceholder;
+        $methods = array_unique([...array_keys($this->before), ...array_keys($this->after)]);
+        $changed = [];
+        foreach ($methods as $method) {
+            if (($this->before[$method] ?? null) !== ($this->after[$method] ?? null)) {
+                $changed[] = $method;
+            }
+        }
+
+        sort($changed);
+
+        return $changed;
     }
 
-    public function accessorSet(mixed $value): void
+    /**
+     * @return list<array{method: string, before: string|null, after: string|null}>
+     */
+    public function diff(): array
     {
-        $this->accessorPlaceholder = $value;
-    }
+        $diff = [];
+        foreach ($this->changedMethods() as $method) {
+            $diff[] = [
+                'method' => $method,
+                'before' => $this->before[$method] ?? null,
+                'after' => $this->after[$method] ?? null,
+            ];
+        }
 
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
+        return $diff;
     }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
 }

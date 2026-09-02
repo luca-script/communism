@@ -39,9 +39,17 @@ final class ModifyConstant
         public readonly At $at,
         public readonly mixed $constant = null,
         public readonly ?string $type = null,
+        public readonly bool $nullValue = false,
+        public readonly ?Slice $slice = null,
     ) {
         if ($type !== null && !in_array($type, ['int', 'long', 'float', 'double', 'string', 'null', 'bool', 'array', 'object', 'class'], true)) {
             throw new \InvalidArgumentException('Unsupported constant type discriminator');
+        }
+        if ($nullValue && $type !== null && $type !== 'null') {
+            throw new \InvalidArgumentException('ModifyConstant nullValue requires the null type discriminator');
+        }
+        if ($nullValue && $constant !== null) {
+            throw new \InvalidArgumentException('ModifyConstant nullValue cannot be combined with a non-null constant');
         }
     }
 }

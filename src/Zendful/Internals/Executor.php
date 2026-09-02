@@ -662,6 +662,23 @@ final class Executor
         return self::classInfo($class) !== null;
     }
 
+    public static function implementInterface(ClassHandle $class, ClassHandle $interface): void
+    {
+        $classInfo = self::writableClassInfo($class);
+        $interfaceInfo = self::classInfo($interface);
+        if ($interfaceInfo === null || ord($interfaceInfo->type) !== Natives::ZEND_CLASS_TYPE_USER
+            || ($interfaceInfo->ce_flags & Natives::ZEND_ACC_INTERFACE) === 0
+        ) {
+            throw new InvalidArgumentException(sprintf('Not a declared user interface: %s', $interface->name()));
+        }
+        $interfaces = class_implements($class->name(), false);
+        if ($interfaces !== false && in_array($interface->name(), $interfaces, true)) {
+            return;
+        }
+
+        self::ffi()->zend_class_implements($classInfo, 1, $interfaceInfo);
+    }
+
     private static function classFlags(ClassHandle $class): int
     {
         $info = self::classInfo($class);
@@ -1115,16 +1132,30 @@ final class Executor
                 $source->methodName(),
             ));
         }
-        if ($ffi->zend_hash_str_find(
+        $existingEntry = $ffi->zend_hash_str_find(
             $ffi->cast('HashTable *', FFI::addr($functionTable)),
             $methodName,
             strlen($methodName),
-        ) !== null) {
-            throw new InvalidArgumentException(sprintf(
-                'Method already exists: %s::%s',
-                $target->name(),
-                $name,
-            ));
+        );
+        if ($existingEntry !== null) {
+            $existingFunction = $ffi->cast('zend_function *', $existingEntry->value->ptr);
+            $existingScope = $existingFunction->scope;
+            $inherited = $existingScope !== null
+                && !FFI::isNull($existingScope)
+                && $existingScope->name !== null
+                && !FFI::isNull($existingScope->name)
+                && strcasecmp(self::zendString($ffi, $existingScope->name), $target->name()) !== 0;
+            if ($inherited) {
+                // A child class may shadow an inherited method. The inherited
+                // function table entry is replaced with a clone below; the
+                // parent's function table remains untouched.
+            } else {
+                throw new InvalidArgumentException(sprintf(
+                    'Method already exists: %s::%s',
+                    $target->name(),
+                    $name,
+                ));
+            }
         }
         $installedFunction = self::cloneUserFunction($ffi, $sourceFunction, $name);
         $installedFunction->scope = $targetInfo;

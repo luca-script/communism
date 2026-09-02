@@ -489,6 +489,7 @@ namespace {
      * @method object|null ts_resource_ex(int $id, object|null $thread_id)
      * @method \Zendful_FFI\zend_string zend_strpprintf(int $max_len, string $format, mixed ...$values)
      * @method \Zendful_FFI\zend_class_entry|null zend_lookup_class(\Zendful_FFI\zend_string $name)
+     * @method void zend_class_implements(\Zendful_FFI\zend_class_entry $class_entry, int $num_interfaces, \Zendful_FFI\zend_class_entry ...$interfaces)
      * @method void free_estring(object $foo)
      * @method \Zendful_FFI\zend_function|null zend_hash_str_find_ptr_lc(\Zendful_FFI\ptr<\Zendful_FFI\HashTable>|\Zendful_FFI\HashTable $ht, string $str, int $len)
     * @method \Zendful_FFI\zval|null zend_hash_str_find(\Zendful_FFI\ptr<\Zendful_FFI\HashTable>|\Zendful_FFI\HashTable $ht, string $key, int $len)

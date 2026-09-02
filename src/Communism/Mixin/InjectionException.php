@@ -18,39 +18,34 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: InjectionException.php                                               *
+ * Consumer: Users                                                            *
+ * Purpose: Source file for InjectionException.php.                           *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+use InvalidArgumentException;
+
+/** Structured context for an injection resolution failure. */
+final class InjectionException extends InvalidArgumentException
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
-
-    public function accessorGet(): mixed
-    {
-        return $this->accessorPlaceholder;
+    public function __construct(
+        public readonly string $point,
+        public readonly string $targetMethod,
+        public readonly int $matched,
+        public readonly ?int $minimum = null,
+        public readonly ?int $maximum = null,
+        public readonly ?int $expected = null,
+        public readonly ?string $mixinClass = null,
+        public readonly ?string $handlerMethod = null,
+        public readonly ?string $resolvedInstruction = null,
+        public readonly ?string $slice = null,
+        public readonly ?string $selector = null,
+        string $message = '',
+    ) {
+        parent::__construct($message);
     }
-
-    public function accessorSet(mixed $value): void
-    {
-        $this->accessorPlaceholder = $value;
-    }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
 }

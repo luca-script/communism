@@ -18,39 +18,42 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: Manifest.php                                                         *
+ * Consumer: Users                                                            *
+ * Purpose: Source file for Manifest.php.                                     *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+/** Base class for declarative groups of mixin transformations. */
+abstract class Manifest
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
+    abstract public function getTransforms(): mixed;
 
-    public function accessorGet(): mixed
+    public static function isSingle(): bool
     {
-        return $this->accessorPlaceholder;
+        return true;
     }
 
-    public function accessorSet(mixed $value): void
+    public function getPriority(): int
     {
-        $this->accessorPlaceholder = $value;
+        return 1000;
     }
 
-    public static function accessorStaticGet(): mixed
+    public function getEnvironment(): ?string
     {
-        return self::$accessorStaticPlaceholder;
+        return null;
     }
 
-    public static function accessorStaticSet(mixed $value): void
+    public function isRequired(): bool
     {
-        self::$accessorStaticPlaceholder = $value;
+        return true;
     }
 
+    public function shouldTransform(string $target, string $mixin): bool
+    {
+        return true;
+    }
 }

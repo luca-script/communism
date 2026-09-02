@@ -18,39 +18,32 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: AccessorInvokerTemplates.php                                         *
- * Consumer: Internal                                                         *
- * Purpose: Source file for AccessorInvokerTemplates.php.                     *
+ * File: Dynamic.php                                                          *
+ * Consumer: Users                                                            *
+ * Purpose: Source file for Dynamic.php.                                      *
  *============================================================================*/
 
 declare(strict_types=1);
 
-namespace Communism\Internals;
+namespace Communism\Mixin;
 
-/** @internal Source bodies copied into generated mixin methods. */
-final class AccessorInvokerTemplates
+use Attribute;
+
+/** Documents a mixin member supplied or transformed by another runtime step. */
+#[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_PROPERTY)]
+final class Dynamic
 {
-    private mixed $accessorPlaceholder;
-    private static mixed $accessorStaticPlaceholder;
-
-    public function accessorGet(): mixed
-    {
-        return $this->accessorPlaceholder;
+    public function __construct(
+        public readonly string $value = '',
+        public readonly ?string $mixin = null,
+    ) {
+        if ($value === '' && $mixin === null) {
+            throw new \InvalidArgumentException('Dynamic requires a description or mixin class');
+        }
     }
 
-    public function accessorSet(mixed $value): void
+    public function description(): string
     {
-        $this->accessorPlaceholder = $value;
+        return $this->value !== '' ? $this->value : (string) $this->mixin;
     }
-
-    public static function accessorStaticGet(): mixed
-    {
-        return self::$accessorStaticPlaceholder;
-    }
-
-    public static function accessorStaticSet(mixed $value): void
-    {
-        self::$accessorStaticPlaceholder = $value;
-    }
-
 }

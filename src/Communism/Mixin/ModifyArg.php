@@ -38,5 +38,6 @@ final class ModifyArg
         public readonly string $method,
         public readonly At $at,
         public readonly int $index = 0,
+        public readonly ?Slice $slice = null,
     ) {}
 }

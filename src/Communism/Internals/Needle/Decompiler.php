@@ -32,6 +32,7 @@ use ReflectionException;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
+use ReflectionNamedType;
 use RuntimeException;
 use Zendful\CompiledOpArrayHandle;
 use Zendful\FunctionHandle;
@@ -59,10 +60,25 @@ final class Decompiler
             throw new InvalidArgumentException(sprintf('%s has no userland bytecode', self::describe($reflection)));
         }
 
-        return self::decompileHandle($source->opArray(), self::describe($reflection));
+        /** @var array<int, string> $variableTypes */
+        $variableTypes = [];
+        foreach ($reflection->getParameters() as $parameter) {
+            $type = $parameter->getType();
+            if ($type instanceof ReflectionNamedType) {
+                foreach ($source->opArray()->variableNames() as $index => $name) {
+                    if ($name === $parameter->getName()) {
+                        $variableTypes[$index] = $type->getName();
+                        break;
+                    }
+                }
+            }
+        }
+
+        return self::decompileHandle($source->opArray(), self::describe($reflection), $variableTypes);
     }
 
-    private static function decompileHandle(OpArrayHandle|CompiledOpArrayHandle $opArray, string $name): MethodBody
+    /** @param array<int, string> $variableTypes */
+    private static function decompileHandle(OpArrayHandle|CompiledOpArrayHandle $opArray, string $name, array $variableTypes = []): MethodBody
     {
         $instructions = [];
         for ($index = 0; $index < $opArray->instructionCount(); $index++) {
@@ -94,6 +110,7 @@ final class Decompiler
             $opArray->variableNames(),
             $opArray->temporaryCount(),
             $opArray->cacheSize(),
+            $variableTypes,
         );
     }
 

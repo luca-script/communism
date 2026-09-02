@@ -69,6 +69,121 @@ it('accepts a method shadow with an explicit target alias', function (): void {
         ->and(in_array('shadowCalculate', get_class_methods(AliasedMethodShadowTarget::class), true))->toBeFalse();
 });
 
+#[Mixin(PrefixedMethodShadowTarget::class)]
+final class PrefixedMethodShadowMixin
+{
+    private function __construct() {}
+
+    #[Shadow(prefix: 'shadow')]
+    public function shadowcalculate(int $value): int
+    {
+        return -1;
+    }
+}
+
+final class PrefixedMethodShadowTarget
+{
+    public function calculate(int $value): int
+    {
+        return $value * 3;
+    }
+}
+
+it('resolves a Shadow method target by removing its prefix', function (): void {
+    (new ReflectionClass(PrefixedMethodShadowTarget::class))->inject(PrefixedMethodShadowMixin::class);
+
+    expect((new PrefixedMethodShadowTarget())->calculate(3))->toBe(9)
+        ->and(in_array('shadowcalculate', get_class_methods(PrefixedMethodShadowTarget::class), true))->toBeFalse();
+});
+
+#[Mixin(RenamedMethodShadowTarget::class)]
+final class RenamedMethodShadowMixin
+{
+    private function __construct() {}
+
+    #[Shadow(aliases: ['renamedCalculate'])]
+    public function calculate(): int
+    {
+        return 0;
+    }
+}
+
+final class RenamedMethodShadowTarget
+{
+    public function renamedCalculate(int $value): int
+    {
+        return $value + 4;
+    }
+}
+
+it('resolves a Shadow method through an ordered alias', function (): void {
+    (new ReflectionClass(RenamedMethodShadowTarget::class))->inject(RenamedMethodShadowMixin::class);
+
+    expect(in_array('calculate', get_class_methods(RenamedMethodShadowTarget::class), true))->toBeFalse();
+});
+
+#[Mixin(RenamedPropertyShadowTarget::class)]
+final class RenamedPropertyShadowMixin
+{
+    private function __construct() {}
+
+    #[Shadow(aliases: ['renamedValue'])]
+    private string $value;
+
+    public function readValue(): string
+    {
+        return $this->value;
+    }
+
+    public function writeValue(string $value): void
+    {
+        $this->value = $value;
+    }
+}
+
+final class RenamedPropertyShadowTarget
+{
+    private string $renamedValue = 'aliased';
+
+    public function currentValue(): string
+    {
+        return $this->renamedValue;
+    }
+}
+
+it('rewrites composed method access for an aliased Shadow property', function (): void {
+    (new ReflectionClass(RenamedPropertyShadowTarget::class))->inject(RenamedPropertyShadowMixin::class);
+
+    expect((new \ReflectionMethod(RenamedPropertyShadowTarget::class, 'readValue'))->invoke(new RenamedPropertyShadowTarget()))
+        ->toBe('aliased');
+});
+
+#[Mixin(MismatchedPrefixShadowTarget::class)]
+final class MismatchedPrefixShadowMixin
+{
+    private function __construct() {}
+
+    #[Shadow(prefix: 'shadow')]
+    public function unrelated(int $value): int
+    {
+        return $value;
+    }
+}
+
+final class MismatchedPrefixShadowTarget
+{
+    public function calculate(int $value): int
+    {
+        return $value;
+    }
+}
+
+it('rejects a Shadow method whose name cannot be resolved by its prefix', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(MismatchedPrefixShadowTarget::class))->inject(MismatchedPrefixShadowMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'does not start with prefix');
+});
+
 #[Mixin(MissingMethodShadowTarget::class)]
 final class MissingMethodShadowMixin
 {
