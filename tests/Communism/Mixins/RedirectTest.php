@@ -222,7 +222,40 @@ it('redirects a NEW point together with its constructor call', function (): void
 it('redirects NEW sequences that contain constructor arguments', function (): void {
     (new ReflectionClass(ConstructorArgumentRedirectTarget::class))->inject(ConstructorArgumentRedirectMixin::class);
 
-    expect((new ConstructorArgumentRedirectTarget())->make(42))->toBeInstanceOf(RedirectReplacementWidget::class);
+    $replacement = (new ConstructorArgumentRedirectTarget())->make(42);
+    if (!$replacement instanceof RedirectConstructedWidgetWithValue) {
+        throw new RuntimeException('Constructor Redirect did not return the replacement value object');
+    }
+
+    expect($replacement)->toBeInstanceOf(RedirectConstructedWidgetWithValue::class)
+        ->and($replacement->value)->toBe(42);
+});
+
+#[Mixin(ConstructorArgumentMismatchTarget::class)]
+final class ConstructorArgumentMismatchMixin
+{
+    private function __construct() {}
+
+    #[Redirect('make', new At('NEW', RedirectConstructedWidgetWithValue::class))]
+    public function replaceWidget(string $value): object
+    {
+        return new RedirectReplacementWidget();
+    }
+}
+
+final class ConstructorArgumentMismatchTarget
+{
+    public function make(int $value): object
+    {
+        return new RedirectConstructedWidgetWithValue($value);
+    }
+}
+
+it('rejects an incompatible NEW handler argument before mutation', function (): void {
+    expect(static fn() => (new ReflectionClass(ConstructorArgumentMismatchTarget::class))->inject(ConstructorArgumentMismatchMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'expects string');
+
+    expect((new ConstructorArgumentMismatchTarget())->make(42))->toBeInstanceOf(RedirectConstructedWidgetWithValue::class);
 });
 
 #[Mixin(ConstructorArgumentRedirectTarget::class)]
@@ -230,9 +263,9 @@ final class ConstructorArgumentRedirectMixin
 {
     private function __construct() {}
     #[Redirect('make', new At('NEW', RedirectConstructedWidgetWithValue::class))]
-    public function replaceWidget(): object
+    public function replaceWidget(int $value): object
     {
-        return new RedirectReplacementWidget();
+        return new RedirectConstructedWidgetWithValue($value);
     }
 }
 

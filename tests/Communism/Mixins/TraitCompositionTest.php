@@ -9,6 +9,7 @@ use Communism\Mixin\Overwrite;
 use Communism\Mixin\Intrinsic;
 use Communism\Mixin\Implements_;
 use Communism\Mixin\Interface_;
+use Communism\Mixin\InterfaceRemap;
 use Communism\Mixin\SoftOverride;
 use Communism\Reflect\ReflectionClass;
 use Communism\Mixin\Shadow;
@@ -425,4 +426,73 @@ it('rejects interface composition when a prefixed method is missing', function (
     expect(static function (): void {
         (new ReflectionClass(MissingComposedTarget::class))->inject(MissingComposedInterfaceMixin::class);
     })->toThrow(InvalidArgumentException::class, 'is missing contract_missing');
+});
+
+#[Mixin(UnprefixedInterfaceTarget::class)]
+#[Implements_(new Interface_(ComposedContract::class, 'contract_', remap: InterfaceRemap::ALL))]
+final class UnprefixedInterfaceMixin
+{
+    private function __construct() {}
+
+    public function describe(): string
+    {
+        return 'unprefixed';
+    }
+}
+
+final class UnprefixedInterfaceTarget {}
+
+it('uses an unprefixed interface method when InterfaceRemap::ALL allows it', function (): void {
+    (new ReflectionClass(UnprefixedInterfaceTarget::class))->inject(UnprefixedInterfaceMixin::class);
+
+    expect((new \ReflectionMethod(UnprefixedInterfaceTarget::class, 'describe'))->invoke(new UnprefixedInterfaceTarget()))
+        ->toBe('unprefixed')
+        ->and((static function (): bool {
+            $interfaces = class_implements(UnprefixedInterfaceTarget::class, false);
+            return $interfaces !== false && in_array(ComposedContract::class, $interfaces, true);
+        })())->toBeTrue();
+});
+
+describe('Unique', function (): void {
+    covers(Unique::class);
+
+    it('defaults Unique to non-silent and accepts silent mode', function (): void {
+
+    expect((new Unique())->silent)->toBeFalse()
+        ->and((new Unique(true))->silent)->toBeTrue();
+    });
+});
+
+#[Mixin(StrictInterfaceRemapTarget::class)]
+#[Implements_(new Interface_(ComposedContract::class, 'contract_', remap: InterfaceRemap::ONLY_PREFIXED))]
+final class StrictInterfaceRemapMixin
+{
+    private function __construct() {}
+
+    public function describe(): string
+    {
+        return 'unprefixed';
+    }
+}
+
+final class StrictInterfaceRemapTarget {}
+
+it('rejects an unprefixed interface method when remapping is restricted', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(StrictInterfaceRemapTarget::class))->inject(StrictInterfaceRemapMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'is missing contract_describe');
+});
+
+describe('Interface_', function (): void {
+    covers(Interface_::class);
+
+    it('rejects undeclared interfaces and invalid interface prefixes', function (): void {
+
+    expect(static fn() => new Interface_('MissingInterfaceForCoverage', 'prefix_'))
+        ->toThrow(InvalidArgumentException::class, 'declared interface')
+        ->and(static fn() => new Interface_(ComposedContract::class, ''))
+        ->toThrow(InvalidArgumentException::class, 'identifier prefix')
+        ->and(static fn() => new Interface_(ComposedContract::class, 'not-valid-'))
+        ->toThrow(InvalidArgumentException::class, 'identifier prefix');
+    });
 });

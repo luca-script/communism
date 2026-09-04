@@ -6,7 +6,10 @@ use Communism\Mixin\At;
 use Communism\Mixin\CallbackInfo;
 use Communism\Mixin\CallbackInfoReturnable;
 use Communism\Mixin\Inject;
+use Communism\Mixin\Local;
 use Communism\Mixin\Mixin;
+use Communism\Mixin\Parameter;
+use Communism\Internals\Needle\Decompiler;
 use Communism\Reflect\ReflectionClass;
 
 #[Mixin(CallbackInjectionTarget::class)]
@@ -194,4 +197,118 @@ it('rejects a virtual CallbackInfo value escaping through a handler return', fun
     })->toThrow(InvalidArgumentException::class, 'CallbackInfo value escaped');
 
     expect((new EscapingCallbackTarget())->greet())->toBe('original');
+});
+
+#[Mixin(ExplicitCallbackBindingTarget::class)]
+final class ExplicitCallbackBindingMixin
+{
+    private function __construct() {}
+
+    /** @param CallbackInfoReturnable<int> $info */
+    #[Inject('score', new At('RETURN'), id: 'score-callback')]
+    public function bind(CallbackInfoReturnable $info, #[Parameter(ordinal: 1)] int $renamed, #[Local(name: 'local')] int $other): void
+    {
+        if ($info->getId() === 'score-callback' && $info->getMethodName() === 'score') {
+            $info->setReturnValue($info->getReturnValue() + $renamed + $other);
+        }
+    }
+}
+
+final class ExplicitCallbackBindingTarget
+{
+    public function score(string $name, int $value): int
+    {
+        $local = $value + 1;
+
+        return $local;
+    }
+}
+
+it('supports explicit local names, parameter ordinals, and virtual method names', function (): void {
+    (new ReflectionClass(ExplicitCallbackBindingTarget::class))->inject(ExplicitCallbackBindingMixin::class);
+
+    expect((new ExplicitCallbackBindingTarget())->score('person', 3))->toBe(11);
+});
+
+#[Mixin(NamedCallbackBindingTarget::class)]
+final class NamedCallbackBindingMixin
+{
+    private function __construct() {}
+
+    /** @param CallbackInfoReturnable<string> $info */
+    #[Inject('score', new At('RETURN'))]
+    public function bind(CallbackInfoReturnable $info, #[Parameter(name: 'foo')] string $renamed): void
+    {
+        $info->setReturnValue($info->getReturnValue() . $renamed);
+    }
+}
+
+final class NamedCallbackBindingTarget
+{
+    public function score(string $foo): string
+    {
+        return 'value';
+    }
+}
+
+it('supports explicit parameter names independent of handler names', function (): void {
+    (new ReflectionClass(NamedCallbackBindingTarget::class))->inject(NamedCallbackBindingMixin::class);
+
+    expect((new NamedCallbackBindingTarget())->score('!'))->toBe('value!');
+});
+
+it('rejects contradictory callback binding declarations', function (): void {
+    expect(static fn() => new Parameter(ordinal: -1))
+        ->toThrow(InvalidArgumentException::class, 'ordinal')
+        ->and(static fn() => new Parameter(ordinal: 0, name: 'foo'))
+        ->toThrow(InvalidArgumentException::class, 'ordinal or name')
+        ->and(static fn() => new Parameter(name: ''))
+        ->toThrow(InvalidArgumentException::class, 'name')
+        ->and(static fn() => new Local(''))
+        ->toThrow(InvalidArgumentException::class, 'name');
+});
+
+describe('Parameter', function (): void {
+    covers(Parameter::class);
+
+    it('rejects an empty explicit callback parameter name', function (): void {
+
+    expect(static fn() => new Parameter(name: ''))
+        ->toThrow(InvalidArgumentException::class, 'name');
+    });
+});
+
+final class CallbackConstantOptimizationTarget
+{
+    public function run(): void {}
+}
+
+#[Mixin(CallbackConstantOptimizationTarget::class)]
+final class CallbackConstantOptimizationMixin
+{
+    private function __construct() {}
+
+    #[Inject('run', new At('HEAD'), id: 'foo')]
+    public function check(CallbackInfo $info): void
+    {
+        if ($info->getId() === 'foo') {
+            $GLOBALS['callback_constant_optimization_ran'] = true;
+        }
+    }
+}
+
+it('folds virtual callback getter comparisons during inlining', function (): void {
+    unset($GLOBALS['callback_constant_optimization_ran']);
+    (new ReflectionClass(CallbackConstantOptimizationTarget::class))->inject(CallbackConstantOptimizationMixin::class);
+
+    (new CallbackConstantOptimizationTarget())->run();
+    expect(callbackGlobalWasSet('callback_constant_optimization_ran'))->toBeTrue();
+
+    $comparisons = array_filter(
+        Decompiler::decompile(CallbackConstantOptimizationTarget::class . '::run')->instructions(),
+        static fn($instruction): bool => in_array($instruction->name, ['IS_EQUAL', 'IS_IDENTICAL'], true)
+            && $instruction->operand1->kind === 'constant'
+            && $instruction->operand2->kind === 'constant',
+    );
+    expect($comparisons)->toBeEmpty();
 });

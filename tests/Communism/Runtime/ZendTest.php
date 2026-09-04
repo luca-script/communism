@@ -31,6 +31,10 @@ final class JitBlacklistTestReplacement extends \Communism\Internals\Zend
 PHP);
 
 it('does not instantiate classes while blacklisting instance methods', function (): void {
+    if (!function_exists('opcache_jit_blacklist')) {
+        throw new PHPUnit\Framework\SkippedWithMessageException('OPcache is intentionally disabled for this runtime');
+    }
+
     expect(function_exists('opcache_jit_blacklist'))->toBeTrue();
 
     JitBlacklistDestructorProbe::$destructorCalls = 0;

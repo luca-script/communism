@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use Communism\Mixin\At;
+use Communism\Mixin\Coerce;
 use Communism\Mixin\Mixin;
 use Communism\Mixin\ModifyConstant;
+use Communism\Internals\Needle\Decompiler;
 use Communism\Reflect\ReflectionClass;
 
 #[Mixin(ModifyConstantTarget::class)]
@@ -32,6 +34,157 @@ it('executes a Mixin-shaped ModifyConstant handler for an exact literal', functi
 
     expect((new ModifyConstantTarget())->value(3))->toBe(10);
 });
+
+#[Mixin(ModifyConstantCoerceTarget::class)]
+final class ModifyConstantCoerceMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[ModifyConstant('value', new At('CONSTANT'), 5)]
+    public function replaceConstant(int $constant): float
+    {
+        return $constant + 0.5;
+    }
+}
+
+final class ModifyConstantCoerceTarget
+{
+    public function value(int $value): int
+    {
+        return $value + 5;
+    }
+}
+
+it('casts a coerced ModifyConstant result to the literal type', function (): void {
+    (new ReflectionClass(ModifyConstantCoerceTarget::class))->inject(ModifyConstantCoerceMixin::class);
+
+    expect((new ModifyConstantCoerceTarget())->value(3))->toBe(10)
+        ->and(array_filter(
+            Decompiler::decompile(ModifyConstantCoerceTarget::class . '::value')->instructions(),
+            static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 4,
+        ))->not->toBeEmpty();
+});
+
+#[Mixin(ModifyConstantParameterCoerceTarget::class)]
+final class ModifyConstantParameterCoerceMixin
+{
+    private function __construct() {}
+
+    #[ModifyConstant('value', new At('CONSTANT'), 5)]
+    public function replaceConstant(#[Coerce] float $constant): float
+    {
+        return $constant + 0.5;
+    }
+}
+
+final class ModifyConstantParameterCoerceTarget
+{
+    public function value(int $value): int
+    {
+        return $value + 5;
+    }
+}
+
+it('coerces a ModifyConstant parameter and replacement result', function (): void {
+    (new ReflectionClass(ModifyConstantParameterCoerceTarget::class))->inject(ModifyConstantParameterCoerceMixin::class);
+    $casts = array_filter(
+        Decompiler::decompile(ModifyConstantParameterCoerceTarget::class . '::value')->instructions(),
+        static fn($instruction): bool => $instruction->name === 'CAST',
+    );
+
+    expect((new ModifyConstantParameterCoerceTarget())->value(3))->toBe(8)
+        ->and(array_filter($casts, static fn($instruction): bool => $instruction->extendedValue === 5))->not->toBeEmpty()
+        ->and(array_filter($casts, static fn($instruction): bool => $instruction->extendedValue === 4))->not->toBeEmpty();
+});
+
+#[Mixin(ModifyConstantRejectParameterTarget::class)]
+final class ModifyConstantRejectParameterMixin
+{
+    private function __construct() {}
+
+    #[ModifyConstant('value', new At('CONSTANT'), 5)]
+    public function rejects(string $constant): string
+    {
+        return $constant;
+    }
+}
+
+final class ModifyConstantRejectParameterTarget
+{
+    public function value(int $value): int
+    {
+        return $value + 5;
+    }
+}
+
+it('rejects an incompatible ModifyConstant parameter before mutation', function (): void {
+    expect(static fn() => (new ReflectionClass(ModifyConstantRejectParameterTarget::class))->inject(ModifyConstantRejectParameterMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'expects string, but the target literal provides int');
+
+    expect((new ModifyConstantRejectParameterTarget())->value(3))->toBe(8);
+});
+
+#[Mixin(ModifyConstantStringParameterTarget::class)]
+final class ModifyConstantStringParameterMixin
+{
+    private function __construct() {}
+
+    #[ModifyConstant('value', new At('CONSTANT'), 5)]
+    public function replaceConstant(#[Coerce] string $constant): int
+    {
+        return (int) $constant + 1;
+    }
+}
+
+final class ModifyConstantStringParameterTarget
+{
+    public function value(int $value): int
+    {
+        return $value + 5;
+    }
+}
+
+it('casts a scalar ModifyConstant input to a string when coerced', function (): void {
+    (new ReflectionClass(ModifyConstantStringParameterTarget::class))->inject(ModifyConstantStringParameterMixin::class);
+
+    expect((new ModifyConstantStringParameterTarget())->value(3))->toBe(9)
+        ->and(array_filter(
+            Decompiler::decompile(ModifyConstantStringParameterTarget::class . '::value')->instructions(),
+            static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 6,
+        ))->not->toBeEmpty();
+});
+
+#[Mixin(ModifyConstantBoolParameterTarget::class)]
+final class ModifyConstantBoolParameterMixin
+{
+    private function __construct() {}
+
+    #[ModifyConstant('value', new At('CONSTANT'), 5)]
+    public function replaceConstant(#[Coerce] bool $constant): int
+    {
+        return $constant ? 6 : 0;
+    }
+}
+
+final class ModifyConstantBoolParameterTarget
+{
+    public function value(int $value): int
+    {
+        return $value + 5;
+    }
+}
+
+it('casts a scalar ModifyConstant input to bool when coerced', function (): void {
+    (new ReflectionClass(ModifyConstantBoolParameterTarget::class))->inject(ModifyConstantBoolParameterMixin::class);
+
+    expect((new ModifyConstantBoolParameterTarget())->value(3))->toBe(9)
+        ->and(array_filter(
+            Decompiler::decompile(ModifyConstantBoolParameterTarget::class . '::value')->instructions(),
+            static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 3,
+        ))->not->toBeEmpty();
+});
+
 
 #[Mixin(ModifyConstantAnyTarget::class)]
 final class ModifyConstantAnyMixin

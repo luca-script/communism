@@ -40,14 +40,17 @@ use Communism\Internals\Needle\Matcher;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 final class Inject
 {
+    public readonly string $method;
     public readonly At $at;
+    /** @var list<non-empty-string> */
+    public readonly array $targets;
 
     /**
-     * @param string $method
+     * @param string|array<mixed> $method
      * @param At $at
      */
     public function __construct(
-        public readonly string $method,
+        string|array $method,
         At $at,
         public readonly bool $cancellable = true,
         public readonly ?int $require = null,
@@ -63,10 +66,21 @@ final class Inject
         public readonly ?string $variableType = null,
         public readonly bool $nullValue = false,
         public readonly bool $variableArgsOnly = false,
+        public readonly string $id = '',
     ) {
-        if ($method === '') {
+        $targets = is_string($method) ? [$method] : $method;
+        if ($targets === [] || (!is_string($method) && !array_is_list($targets))) {
             throw new \InvalidArgumentException('An injection target method must not be empty');
         }
+        $normalized = [];
+        foreach ($targets as $target) {
+            if (!is_string($target) || $target === '') {
+                throw new \InvalidArgumentException('An injection target method must not be empty');
+            }
+            $normalized[] = $target;
+        }
+        $this->method = $normalized[0];
+        $this->targets = $normalized;
 
         if ($require !== null && $require < 0) {
             throw new \InvalidArgumentException('Inject require must be non-negative');

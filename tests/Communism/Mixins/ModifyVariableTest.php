@@ -3,8 +3,11 @@
 declare(strict_types=1);
 
 use Communism\Mixin\At;
+use Communism\Mixin\Coerce;
 use Communism\Mixin\Mixin;
 use Communism\Mixin\ModifyVariable;
+use Communism\Internals\Needle\Decompiler;
+use Communism\Internals\Needle\Operand;
 use Communism\Reflect\ReflectionClass;
 
 #[Mixin(ModifyVariableTarget::class)]
@@ -33,6 +36,197 @@ it('executes a Mixin-shaped ModifyVariable handler for a named store', function 
     (new ReflectionClass(ModifyVariableTarget::class))->inject(ModifyVariableMixin::class);
 
     expect((new ModifyVariableTarget())->value(3))->toBe(7);
+});
+
+#[Mixin(ModifyVariableUnionTarget::class)]
+final class ModifyVariableUnionMixin
+{
+    private function __construct() {}
+
+    #[ModifyVariable('value', new At('STORE'), 'result')]
+    public function changeUnion(int|float $result): int|float
+    {
+        return $result + 6;
+    }
+}
+
+final class ModifyVariableUnionTarget
+{
+    public function value(int|float $value): int|float
+    {
+        $result = $value;
+
+        return $result;
+    }
+}
+
+it('matches a ModifyVariable handler using a union local type', function (): void {
+    (new ReflectionClass(ModifyVariableUnionTarget::class))->inject(ModifyVariableUnionMixin::class);
+    $body = Decompiler::decompile(ModifyVariableUnionTarget::class . '::value');
+    $operand = $body->variableOperand('value');
+    if (!$operand instanceof Operand) {
+        throw new RuntimeException('Union parameter was not present in the decompiled CV table');
+    }
+
+    expect((new ModifyVariableUnionTarget())->value(3))->toBe(9)
+        ->and($body->variableType($operand))->toBe('int|float');
+});
+
+#[Mixin(ModifyVariableInputCoerceTarget::class)]
+final class ModifyVariableInputCoerceMixin
+{
+    private function __construct() {}
+
+    #[ModifyVariable('value', new At('STORE'), 'result')]
+    public function changeResult(#[Coerce] float $result): float
+    {
+        return $result + 0.5;
+    }
+}
+
+final class ModifyVariableInputCoerceTarget
+{
+    public function value(int $value): int
+    {
+        $result = $value;
+
+        return $result;
+    }
+}
+
+it('coerces a ModifyVariable input before inlining the handler', function (): void {
+    (new ReflectionClass(ModifyVariableInputCoerceTarget::class))->inject(ModifyVariableInputCoerceMixin::class);
+
+    expect((new ModifyVariableInputCoerceTarget())->value(3))->toBe(3)
+        ->and(array_filter(
+            Decompiler::decompile(ModifyVariableInputCoerceTarget::class . '::value')->instructions(),
+            static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 5,
+        ))->not->toBeEmpty();
+});
+
+
+#[Mixin(ModifyVariableInputRejectTarget::class)]
+final class ModifyVariableInputRejectMixin
+{
+    private function __construct() {}
+
+    #[ModifyVariable('value', new At('STORE'), 'result')]
+    public function rejects(float $result): float
+    {
+        return $result;
+    }
+}
+
+final class ModifyVariableInputRejectTarget
+{
+    public function value(int $value): int
+    {
+        $result = $value;
+
+        return $result;
+    }
+}
+
+it('rejects a ModifyVariable input coercion without Coerce', function (): void {
+    expect(static fn() => (new ReflectionClass(ModifyVariableInputRejectTarget::class))->inject(ModifyVariableInputRejectMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'did not match STORE target');
+});
+
+#[Mixin(ModifyVariableUnionRejectTarget::class)]
+final class ModifyVariableUnionRejectMixin
+{
+    private function __construct() {}
+
+    #[ModifyVariable('value', new At('STORE'), 'result')]
+    public function rejects(string|bool $result): string|bool
+    {
+        return $result;
+    }
+}
+
+final class ModifyVariableUnionRejectTarget
+{
+    public function value(int|float $value): int|float
+    {
+        $result = $value;
+
+        return $result;
+    }
+}
+
+it('rejects a ModifyVariable union type incompatible with the local', function (): void {
+    expect(static fn() => (new ReflectionClass(ModifyVariableUnionRejectTarget::class))->inject(ModifyVariableUnionRejectMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'did not match STORE target');
+
+    expect((new ModifyVariableUnionRejectTarget())->value(3))->toBe(3);
+});
+
+interface ModifyVariableIntersectionLeft {}
+
+interface ModifyVariableIntersectionRight {}
+
+final class ModifyVariableIntersectionValue implements ModifyVariableIntersectionLeft, ModifyVariableIntersectionRight {}
+
+#[Mixin(ModifyVariableIntersectionTarget::class)]
+final class ModifyVariableIntersectionMixin
+{
+    private function __construct() {}
+
+    #[ModifyVariable('value', new At('STORE'), 'result')]
+    public function preserveIntersection(ModifyVariableIntersectionLeft&ModifyVariableIntersectionRight $result): ModifyVariableIntersectionLeft&ModifyVariableIntersectionRight
+    {
+        return $result;
+    }
+}
+
+final class ModifyVariableIntersectionTarget
+{
+    public function value(ModifyVariableIntersectionLeft&ModifyVariableIntersectionRight $value): ModifyVariableIntersectionLeft&ModifyVariableIntersectionRight
+    {
+        $result = $value;
+
+        return $result;
+    }
+}
+
+it('matches ModifyVariable handlers using intersection local types', function (): void {
+    (new ReflectionClass(ModifyVariableIntersectionTarget::class))->inject(ModifyVariableIntersectionMixin::class);
+    $value = new ModifyVariableIntersectionValue();
+
+    expect((new ModifyVariableIntersectionTarget())->value($value))->toBe($value);
+});
+
+#[Mixin(ModifyVariableCoerceTarget::class)]
+final class ModifyVariableCoerceMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[ModifyVariable('value', new At('STORE'), 'result')]
+    public function changeResult(int $result): float
+    {
+        return $result + 0.5;
+    }
+}
+
+final class ModifyVariableCoerceTarget
+{
+    public function value(int $value): int
+    {
+        $result = $value;
+
+        return $result;
+    }
+}
+
+it('casts a coerced ModifyVariable result to the local type', function (): void {
+    (new ReflectionClass(ModifyVariableCoerceTarget::class))->inject(ModifyVariableCoerceMixin::class);
+
+    expect((new ModifyVariableCoerceTarget())->value(3))->toBe(3)
+        ->and(array_filter(
+            Decompiler::decompile(ModifyVariableCoerceTarget::class . '::value')->instructions(),
+            static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 4,
+        ))->not->toBeEmpty();
 });
 
 #[Mixin(ModifyVariableLoadTarget::class)]

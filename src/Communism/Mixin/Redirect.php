@@ -33,6 +33,14 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 final class Redirect
 {
-    /** @param At $at */
-    public function __construct(public readonly string $method, public readonly At $at, public readonly ?Slice $slice = null) {}
+    public readonly string $method;
+    /** @var list<non-empty-string> */
+    public readonly array $targets;
+
+    /** @param string|array<mixed> $method */
+    public function __construct(string|array $method, public readonly At $at, public readonly ?Slice $slice = null)
+    {
+        $this->targets = TargetMethods::normalize($method);
+        $this->method = $this->targets[0];
+    }
 }

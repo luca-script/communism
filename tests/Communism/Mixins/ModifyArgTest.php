@@ -135,3 +135,41 @@ it('applies ModifyArg only inside its declared slice', function (): void {
 
     expect((new ModifyArgSliceTarget())->value(4))->toBe(18);
 });
+
+function multiModifyArgCall(int $value): int
+{
+    return $value * 2;
+}
+
+#[Mixin(MultiModifyArgTarget::class)]
+final class MultiModifyArgMixin
+{
+    private function __construct() {}
+
+    #[ModifyArg(['first', 'second'], new At('INVOKE', 'multiModifyArgCall'))]
+    public function changeBoth(int $value): int
+    {
+        return $value + 1;
+    }
+}
+
+final class MultiModifyArgTarget
+{
+    public function first(int $value): int
+    {
+        return multiModifyArgCall($value);
+    }
+
+    public function second(int $value): int
+    {
+        return multiModifyArgCall($value);
+    }
+}
+
+it('applies ModifyArg to multiple target methods', function (): void {
+    (new ReflectionClass(MultiModifyArgTarget::class))->inject(MultiModifyArgMixin::class);
+
+    $target = new MultiModifyArgTarget();
+    expect($target->first(4))->toBe(10)
+        ->and($target->second(4))->toBe(10);
+});

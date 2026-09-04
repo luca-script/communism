@@ -92,6 +92,26 @@ it('reports Dynamic context when an annotated injection target is missing', func
     expect($attribute?->newInstance()->description())->toBe('provided by an upstream transformation');
 });
 
+describe('TransformationSnapshot', function (): void {
+    covers(TransformationSnapshot::class);
+
+    it('reports changed methods in transformation snapshots', function (): void {
+
+    $snapshot = new TransformationSnapshot(
+        'Target',
+        'Mixin',
+        ['same' => 'a', 'removed' => 'b'],
+        ['same' => 'a', 'changed' => 'c'],
+    );
+
+    expect($snapshot->changedMethods())->toBe(['changed', 'removed'])
+        ->and($snapshot->diff())->toBe([
+            ['method' => 'changed', 'before' => null, 'after' => 'c'],
+            ['method' => 'removed', 'before' => 'b', 'after' => null],
+        ]);
+    });
+});
+
 #[Mixin(ZendValidationTarget::class)]
 final class ZendValidationUniqueCollision
 {

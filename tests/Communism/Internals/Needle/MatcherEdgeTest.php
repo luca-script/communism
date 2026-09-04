@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use Communism\Internals\Needle\Instruction;
+use Communism\Internals\Needle\InvocationSpec;
 use Communism\Internals\Needle\Matcher;
+use Communism\Internals\Needle\MatchResult;
 use Communism\Internals\Needle\MethodBody;
 use Communism\Internals\Needle\Operand;
 use Communism\Mixin\At;
@@ -152,7 +154,7 @@ it('covers Matcher validation and slice boundaries', function (): void {
         ->and($call('matchesJump', $jump, 1))->toBeFalse()
         ->and($call('matchesJump', $jump, 'UNCONDITIONAL'))->toBeTrue()
         ->and($call('matchesJump', new Instruction(0, 'JMPZ', Operand::unused(), $unused, $unused), 'CONDITIONAL'))->toBeTrue()
-        ->and(static fn() => $call('shift', $body, new At('HEAD', shift: 'BY', by: 32), [new \Communism\Internals\Needle\MatchResult(0, 0, 'head')]))
+        ->and(static fn() => $call('shift', $body, new At('HEAD', shift: 'BY', by: 32), [new MatchResult(0, 0, 'head')]))
         ->toThrow(InvalidArgumentException::class)
         ->and(static fn() => $call('sliceBounds', $body, new Slice(new At('CONSTANT', 'missing'), null)))
         ->toThrow(InvalidArgumentException::class)
@@ -172,5 +174,5 @@ it('covers Matcher validation and slice boundaries', function (): void {
     ]);
     expect($call('constructorEnd', $nestedConstructor, 0))->toBe(3)
         ->and($call('constructorEnd', new MethodBody('X::__construct', null, 0, 0, [new Instruction(0, 'NEW', $unused, $unused, $unused)]), 0))->toBeNull()
-        ->and($call('matchesInvocation', new MethodBody('matcher', null, 0, 0, [new Instruction(0, 'INIT_FCALL', $unused, Operand::constant('foo', 0), $unused), new Instruction(0, 'DO_FCALL', $unused, $unused, $unused)]), 0, 1, \Communism\Internals\Needle\InvocationSpec::parse(['foo', ['numargs' => 2]])))->toBeFalse();
+        ->and($call('matchesInvocation', new MethodBody('matcher', null, 0, 0, [new Instruction(0, 'INIT_FCALL', $unused, Operand::constant('foo', 0), $unused), new Instruction(0, 'DO_FCALL', $unused, $unused, $unused)]), 0, 1, InvocationSpec::parse(['foo', ['numargs' => 2]])))->toBeFalse();
 });

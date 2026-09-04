@@ -39,6 +39,7 @@ final class Interface_
         public readonly string $interface,
         public readonly string $prefix,
         public readonly bool $unique = false,
+        public readonly InterfaceRemap $remap = InterfaceRemap::ALL,
     ) {
         if (!interface_exists($interface)) {
             throw new \InvalidArgumentException(sprintf('Interface_ requires a declared interface, got %s', $interface));

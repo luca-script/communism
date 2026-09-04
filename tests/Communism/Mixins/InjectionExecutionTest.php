@@ -3,12 +3,59 @@
 declare(strict_types=1);
 
 use Communism\Mixin\At;
+use Communism\Mixin\CallbackInfo;
 use Communism\Mixin\Group;
 use Communism\Mixin\Inject;
 use Communism\Mixin\Mixin;
 use Communism\Mixin\Redirect;
 use Communism\Reflect\ReflectionClass;
 use Communism\Mixin\Slice;
+
+final class MultiTargetInjectionTarget
+{
+    public function first(): string
+    {
+        return 'first';
+    }
+
+    public function second(): string
+    {
+        return 'second';
+    }
+}
+
+function markMultiTargetInjection(string $method): void
+{
+    $GLOBALS['multi_target_' . $method] = true;
+}
+
+function multiTargetInjectionMarked(string $method): bool
+{
+    return isset($GLOBALS['multi_target_' . $method]);
+}
+
+#[Mixin(MultiTargetInjectionTarget::class)]
+final class MultiTargetInjectionMixin
+{
+    private function __construct() {}
+
+    #[Inject(['first', 'second'], new At('HEAD'))]
+    public function record(CallbackInfo $info): void
+    {
+        markMultiTargetInjection($info->getMethodName());
+    }
+}
+
+it('applies one Inject callback to every selected target method', function (): void {
+    unset($GLOBALS['multi_target_first'], $GLOBALS['multi_target_second']);
+    (new ReflectionClass(MultiTargetInjectionTarget::class))->inject(MultiTargetInjectionMixin::class);
+
+    $target = new MultiTargetInjectionTarget();
+    expect($target->first())->toBe('first')
+        ->and($target->second())->toBe('second')
+        ->and(multiTargetInjectionMarked('first'))->toBeTrue()
+        ->and(multiTargetInjectionMarked('second'))->toBeTrue();
+});
 
 #[Mixin(ExecutableInjectionTarget::class)]
 final class ExecutableInjectionTrait

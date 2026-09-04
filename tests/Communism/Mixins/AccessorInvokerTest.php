@@ -6,6 +6,7 @@ use Communism\Mixin\Accessor;
 use Communism\Mixin\Invoker;
 use Communism\Mixin\Mixin;
 use Communism\Internals\Needle\Decompiler;
+use Communism\Reflect\ReflectionClass;
 
 #[Mixin(AccessorTarget::class)]
 final class AccessorMixin
@@ -160,7 +161,7 @@ final class MissingInvokerMixin
 
 
 it('generates instance accessors and private method invokers', function (): void {
-    (new Communism\Reflect\ReflectionClass(AccessorTarget::class))->inject(AccessorMixin::class);
+    (new ReflectionClass(AccessorTarget::class))->inject(AccessorMixin::class);
 
     $target = new AccessorTarget();
     expect($target->getSecret())->toBe('hidden')
@@ -177,14 +178,14 @@ it('generates instance accessors and private method invokers', function (): void
 });
 
 it('generates static accessors and explicitly named invokers', function (): void {
-    (new Communism\Reflect\ReflectionClass(StaticAccessorTarget::class))->inject(StaticAccessorMixin::class);
+    (new ReflectionClass(StaticAccessorTarget::class))->inject(StaticAccessorMixin::class);
 
     expect(StaticAccessorTarget::getCount())->toBe(4)
         ->and(StaticAccessorTarget::callSum(6, 7))->toBe(13);
 });
 
 it('keeps separately generated accessors bound to their own members', function (): void {
-    (new Communism\Reflect\ReflectionClass(MultipleAccessorTarget::class))->inject(MultipleAccessorMixin::class);
+    (new ReflectionClass(MultipleAccessorTarget::class))->inject(MultipleAccessorMixin::class);
 
     $target = new MultipleAccessorTarget();
     expect($target->first())->toBe('first')
@@ -193,7 +194,7 @@ it('keeps separately generated accessors bound to their own members', function (
 
 it('rejects an accessor for a missing property before adding the method', function (): void {
     expect(function (): never {
-        (new Communism\Reflect\ReflectionClass(MissingAccessorTarget::class))->inject(MissingAccessorMixin::class);
+        (new ReflectionClass(MissingAccessorTarget::class))->inject(MissingAccessorMixin::class);
         throw new \RuntimeException('Accessor injection unexpectedly succeeded');
     })
         ->toThrow(\InvalidArgumentException::class, 'targets missing property $missing');
@@ -202,7 +203,7 @@ it('rejects an accessor for a missing property before adding the method', functi
 
 it('rejects an invoker for a missing target method before adding the method', function (): void {
     expect(function (): never {
-        (new Communism\Reflect\ReflectionClass(MissingInvokerTarget::class))->inject(MissingInvokerMixin::class);
+        (new ReflectionClass(MissingInvokerTarget::class))->inject(MissingInvokerMixin::class);
         throw new \RuntimeException('Invoker injection unexpectedly succeeded');
     })
         ->toThrow(\InvalidArgumentException::class, 'targets a missing method');

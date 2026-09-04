@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Communism\Mixin\Args;
 use Communism\Mixin\At;
+use Communism\Mixin\Coerce;
 use Communism\Mixin\Mixin;
 use Communism\Mixin\ModifyArgs;
 use Communism\Internals\Needle\Decompiler;
@@ -146,6 +147,236 @@ it('does not emit INIT_ARRAY while lowering ModifyArgs reads', function (): void
 
     expect($names)->not->toContain('INIT_ARRAY')
         ->and($names)->not->toContain('NEW');
+});
+
+#[Mixin(ModifyArgsPrimitiveMismatchTarget::class)]
+final class ModifyArgsPrimitiveMismatchMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsCount'))]
+    public function rewrite(Args $args): void
+    {
+        $args->set(0, 'not-an-int');
+    }
+}
+
+final class ModifyArgsPrimitiveMismatchTarget
+{
+    public function run(int $first, int $second, int $third): int
+    {
+        return modifyArgsCount($first, $second, $third);
+    }
+}
+
+it('rejects a known primitive Args replacement before mutation', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(ModifyArgsPrimitiveMismatchTarget::class))->inject(ModifyArgsPrimitiveMismatchMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'provides string, but the invocation requires int');
+
+    expect((new ModifyArgsPrimitiveMismatchTarget())->run(1, 2, 3))->toBe(6);
+});
+
+#[Mixin(ModifyArgsSetAllPrimitiveMismatchTarget::class)]
+final class ModifyArgsSetAllPrimitiveMismatchMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsCount'))]
+    public function rewrite(Args $args): void
+    {
+        $args->setAll(['not-an-int', 2, 3]);
+    }
+}
+
+final class ModifyArgsSetAllPrimitiveMismatchTarget
+{
+    public function run(int $first, int $second, int $third): int
+    {
+        return modifyArgsCount($first, $second, $third);
+    }
+}
+
+it('applies primitive replacement validation to setAll', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(ModifyArgsSetAllPrimitiveMismatchTarget::class))->inject(ModifyArgsSetAllPrimitiveMismatchMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'provides string, but the invocation requires int');
+
+    expect((new ModifyArgsSetAllPrimitiveMismatchTarget())->run(1, 2, 3))->toBe(6);
+});
+
+function modifyArgsCoercedInt(int $value): int
+{
+    return $value;
+}
+
+#[Mixin(ModifyArgsCoerceTarget::class)]
+final class ModifyArgsCoerceMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsCoercedInt'))]
+    public function rewrite(Args $args): void
+    {
+        $args->set(0, 2.75);
+    }
+}
+
+final class ModifyArgsCoerceTarget
+{
+    public function run(int $value): int
+    {
+        return modifyArgsCoercedInt($value);
+    }
+}
+
+it('coerces statically known numeric Args replacements when opted in', function (): void {
+    (new ReflectionClass(ModifyArgsCoerceTarget::class))->inject(ModifyArgsCoerceMixin::class);
+
+    expect((new ModifyArgsCoerceTarget())->run(1))->toBe(2);
+});
+
+#[Mixin(ModifyArgsDynamicCoerceTarget::class)]
+final class ModifyArgsDynamicCoerceMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsCoercedInt'))]
+    public function rewrite(Args $args): void
+    {
+        $replacement = 2.75;
+        $args->set(0, $replacement);
+    }
+}
+
+final class ModifyArgsDynamicCoerceTarget
+{
+    public function run(int $value): int
+    {
+        return modifyArgsCoercedInt($value);
+    }
+}
+
+it('emits a cast for a typed runtime Args replacement', function (): void {
+    (new ReflectionClass(ModifyArgsDynamicCoerceTarget::class))->inject(ModifyArgsDynamicCoerceMixin::class);
+
+    expect((new ModifyArgsDynamicCoerceTarget())->run(1))->toBe(2);
+
+    $casts = array_filter(
+        Decompiler::decompile(ModifyArgsDynamicCoerceTarget::class . '::run')->instructions(),
+        static fn(Instruction $instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 4,
+    );
+    expect($casts)->not->toBeEmpty();
+});
+
+function modifyArgsUnion(int|float $value): string
+{
+    return (string) $value;
+}
+
+#[Mixin(ModifyArgsUnionTarget::class)]
+final class ModifyArgsUnionMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsUnion'))]
+    public function rewrite(Args $args): void
+    {
+        $args->set(0, 'not-numeric');
+    }
+}
+
+final class ModifyArgsUnionTarget
+{
+    public function run(int|float $value): string
+    {
+        return modifyArgsUnion($value);
+    }
+}
+
+it('rejects known replacements incompatible with every union arm', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(ModifyArgsUnionTarget::class))->inject(ModifyArgsUnionMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'requires int|float');
+
+    expect((new ModifyArgsUnionTarget())->run(1))->toBe('1');
+});
+
+/** @param array<int, mixed> $values */
+function modifyArgsStrictArray(array $values): int
+{
+    return count($values);
+}
+
+/** @return iterable<int, mixed> */
+function modifyArgsIterableSource(): iterable
+{
+    return [1, 2, 3];
+}
+
+#[Mixin(ModifyArgsArrayExpressionTarget::class)]
+final class ModifyArgsArrayExpressionMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsStrictArray'))]
+    public function rewrite(Args $args): void
+    {
+        $replacement = modifyArgsIterableSource();
+        $args->set(0, $replacement);
+    }
+}
+
+final class ModifyArgsArrayExpressionTarget
+{
+    /** @param array<int, mixed> $values */
+    public function run(array $values): int
+    {
+        return modifyArgsStrictArray($values);
+    }
+}
+
+it('coerces a typed iterable expression used by ModifyArgs', function (): void {
+    (new ReflectionClass(ModifyArgsArrayExpressionTarget::class))->inject(ModifyArgsArrayExpressionMixin::class);
+
+    expect((new ModifyArgsArrayExpressionTarget())->run([9]))->toBe(3);
+
+    $casts = array_filter(
+        Decompiler::decompile(ModifyArgsArrayExpressionTarget::class . '::run')->instructions(),
+        static fn(Instruction $instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 7,
+    );
+    expect($casts)->not->toBeEmpty();
+});
+
+#[Mixin(ModifyArgsCoerceRejectTarget::class)]
+final class ModifyArgsCoerceRejectMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsCoercedInt'))]
+    public function rewrite(Args $args): void
+    {
+        $args->set(0, 2.75);
+    }
+}
+
+final class ModifyArgsCoerceRejectTarget
+{
+    public function run(int $value): int
+    {
+        return modifyArgsCoercedInt($value);
+    }
+}
+
+it('rejects statically known numeric Args replacements without Coerce', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(ModifyArgsCoerceRejectTarget::class))->inject(ModifyArgsCoerceRejectMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'provides float, but the invocation requires int');
+
+    expect((new ModifyArgsCoerceRejectTarget())->run(1))->toBe(1);
 });
 
 it('keeps the Args surface virtual at runtime', function (): void {
@@ -345,12 +576,80 @@ final class RuntimeModifyArgsSetAllTarget
     }
 }
 
-it('rejects runtime-built ModifyArgs setAll lists before mutation', function (): void {
-    expect(static function (): void {
-        (new ReflectionClass(RuntimeModifyArgsSetAllTarget::class))->inject(RuntimeModifyArgsSetAllMixin::class);
-    })->toThrow(InvalidArgumentException::class, 'statically known list of values');
+it('folds a zero-argument function returning a literal setAll list', function (): void {
+    (new ReflectionClass(RuntimeModifyArgsSetAllTarget::class))->inject(RuntimeModifyArgsSetAllMixin::class);
 
-    expect((new RuntimeModifyArgsSetAllTarget())->run(2, 'original'))->toBe('2original');
+    expect((new RuntimeModifyArgsSetAllTarget())->run(2, 'original'))->toBe('10!');
+});
+
+/** @return array<int, mixed> */
+function runtimeModifyArgsValuesWithArgument(int $ignored): array
+{
+    return [10, '!'];
+}
+
+#[Mixin(RuntimeModifyArgsArgumentSetAllTarget::class)]
+final class RuntimeModifyArgsArgumentSetAllMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsJoin'))]
+    public function runtimeSetAll(Args $args): void
+    {
+        $values = runtimeModifyArgsValuesWithArgument(1);
+        $args->setAll($values);
+    }
+}
+
+final class RuntimeModifyArgsArgumentSetAllTarget
+{
+    public function run(int $first, string $second): string
+    {
+        return modifyArgsJoin($first, $second);
+    }
+}
+
+it('rejects setAll arrays whose producer requires runtime arguments', function (): void {
+    expect(static fn() => (new ReflectionClass(RuntimeModifyArgsArgumentSetAllTarget::class))->inject(RuntimeModifyArgsArgumentSetAllMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'statically known list of values');
+
+    expect((new RuntimeModifyArgsArgumentSetAllTarget())->run(2, 'original'))->toBe('2original');
+});
+
+final class StaticModifyArgsValues
+{
+    /** @return array<int, mixed> */
+    public static function values(): array
+    {
+        return [11, '!'];
+    }
+}
+
+#[Mixin(StaticModifyArgsSetAllTarget::class)]
+final class StaticModifyArgsSetAllMixin
+{
+    private function __construct() {}
+
+    #[ModifyArgs('run', new At('INVOKE', 'modifyArgsJoin'))]
+    public function runtimeSetAll(Args $args): void
+    {
+        $values = StaticModifyArgsValues::values();
+        $args->setAll($values);
+    }
+}
+
+final class StaticModifyArgsSetAllTarget
+{
+    public function run(int $first, string $second): string
+    {
+        return modifyArgsJoin($first, $second);
+    }
+}
+
+it('folds a zero-argument static method returning a literal setAll list', function (): void {
+    (new ReflectionClass(StaticModifyArgsSetAllTarget::class))->inject(StaticModifyArgsSetAllMixin::class);
+
+    expect((new StaticModifyArgsSetAllTarget())->run(2, 'original'))->toBe('11!');
 });
 
 final class ModifyArgsEvaluationOrder

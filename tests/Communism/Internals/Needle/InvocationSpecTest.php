@@ -4,6 +4,18 @@ declare(strict_types=1);
 
 use Communism\Internals\Needle\InvocationSpec;
 
+interface InvocationIntersectionLeft {}
+interface InvocationIntersectionRight {}
+
+final class InvocationIntersectionValue implements InvocationIntersectionLeft, InvocationIntersectionRight {}
+
+function invocationUnion(string|int $value): int|float
+{
+    return is_string($value) ? strlen($value) : (float) $value;
+}
+
+function invocationIntersection(InvocationIntersectionLeft&InvocationIntersectionRight $value): void {}
+
 it('parses function, member, static, and extended invocation specifications', function (): void {
     expect(InvocationSpec::parse('strlen'))
         ->toMatchObject(['kind' => InvocationSpec::FUNCTION, 'class' => null, 'name' => 'strlen', 'numArgs' => null])
@@ -53,6 +65,15 @@ it('parses and validates PHP invocation signatures against reflection metadata',
         ->and(InvocationSpec::parse(['strlen', ['signature' => ['parameters' => ['int'], 'return' => 'int']]])->acceptsSignature(new ReflectionFunction('strlen')))->toBeFalse();
 });
 
+it('matches PHP union, nullable, and intersection invocation signatures', function (): void {
+    expect(InvocationSpec::parse(['invocationUnion', ['signature' => ['parameters' => ['int|string'], 'return' => 'float|int']]])
+        ->acceptsSignature(new ReflectionFunction('invocationUnion')))->toBeTrue()
+        ->and(InvocationSpec::parse(['invocationIntersection', ['signature' => ['parameters' => ['InvocationIntersectionRight&InvocationIntersectionLeft'], 'return' => 'void']]])
+            ->acceptsSignature(new ReflectionFunction('invocationIntersection')))->toBeTrue()
+        ->and(InvocationSpec::parse(['invocationUnion', ['signature' => ['parameters' => ['?string'], 'return' => 'int']]])
+            ->acceptsSignature(new ReflectionFunction('invocationUnion')))->toBeFalse();
+});
+
 it('rejects malformed invocation specifications and matches wildcard names', function (): void {
     foreach ([
         [],
@@ -63,6 +84,8 @@ it('rejects malformed invocation specifications and matches wildcard names', fun
         ['run', ['numargs' => [3, 2]]],
         ['run', ['signature' => ['parameters' => ['string']]]],
         ['run', ['signature' => 123]],
+        ['run', ['signature' => ['parameters' => ['string|'], 'return' => 'int']]],
+        ['run', ['signature' => ['parameters' => ['?string|int'], 'return' => 'int']]],
         ['run', ['aliases' => []]],
         ['run', ['aliases' => ['has space']]],
         [''],

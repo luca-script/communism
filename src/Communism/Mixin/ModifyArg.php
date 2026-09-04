@@ -33,11 +33,18 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 final class ModifyArg
 {
-    /** @param At $at */
+    public readonly string $method;
+    /** @var list<non-empty-string> */
+    public readonly array $targets;
+
+    /** @param string|array<mixed> $method */
     public function __construct(
-        public readonly string $method,
+        string|array $method,
         public readonly At $at,
         public readonly int $index = 0,
         public readonly ?Slice $slice = null,
-    ) {}
+    ) {
+        $this->targets = TargetMethods::normalize($method);
+        $this->method = $this->targets[0];
+    }
 }

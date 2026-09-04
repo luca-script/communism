@@ -9,6 +9,7 @@ use Communism\Mixin\Inject;
 use Communism\Mixin\HandlerValidationException;
 use Communism\Mixin\Mixin;
 use Communism\Mixin\Redirect;
+use Communism\Internals\Needle\Decompiler;
 use Communism\Reflect\ReflectionClass;
 
 interface CoerceReceiverContract
@@ -50,6 +51,32 @@ it('validates a Redirect member receiver against its declared interface', functi
     expect((new CoerceReceiverTarget())->run(new CoerceReceiverService(), 'ok'))->toBe('OK!');
 });
 
+#[Mixin(CoerceReceiverUnionTarget::class)]
+final class CoerceReceiverUnionMixin
+{
+    private function __construct() {}
+
+    #[Redirect('run', new At('INVOKE', '->hidden'))]
+    public function redirect(CoerceReceiverContract|stdClass $receiver, string $value): string
+    {
+        return strtoupper($value);
+    }
+}
+
+final class CoerceReceiverUnionTarget
+{
+    public function run(CoerceReceiverService $service, string $value): string
+    {
+        return $service->hidden($value);
+    }
+}
+
+it('validates union-typed Redirect receivers', function (): void {
+    (new ReflectionClass(CoerceReceiverUnionTarget::class))->inject(CoerceReceiverUnionMixin::class);
+
+    expect((new CoerceReceiverUnionTarget())->run(new CoerceReceiverService(), 'ok'))->toBe('OK');
+});
+
 #[Mixin(CoerceReceiverRejectTarget::class)]
 final class CoerceReceiverRejectMixin
 {
@@ -77,6 +104,60 @@ it('rejects an incompatible Redirect member receiver before mutation', function 
     expect((new CoerceReceiverRejectTarget())->run(new CoerceReceiverService(), 'ok'))->toBe('ok!');
 });
 
+#[Mixin(CoerceDynamicReceiverTarget::class)]
+final class CoerceDynamicReceiverMixin
+{
+    private function __construct() {}
+
+    #[Redirect('run', new At('INVOKE', '->hidden'))]
+    public function redirect(#[Coerce] CoerceReceiverContract $receiver, string $value): string
+    {
+        return $receiver->hidden(strtoupper($value));
+    }
+}
+
+final class CoerceDynamicReceiverTarget
+{
+    public function run($service, string $value): string
+    {
+        return $service->hidden($value);
+    }
+}
+
+it('allows an explicitly coerced Redirect receiver with an unknown target type', function (): void {
+    (new ReflectionClass(CoerceDynamicReceiverTarget::class))->inject(CoerceDynamicReceiverMixin::class);
+
+    expect((new CoerceDynamicReceiverTarget())->run(new CoerceReceiverService(), 'ok'))->toBe('OK!');
+});
+
+#[Mixin(CoerceDynamicReceiverRejectTarget::class)]
+final class CoerceDynamicReceiverRejectMixin
+{
+    private function __construct() {}
+
+    #[Redirect('run', new At('INVOKE', '->hidden'))]
+    public function redirect(CoerceReceiverContract $receiver, string $value): string
+    {
+        return $receiver->hidden(strtoupper($value));
+    }
+}
+
+final class CoerceDynamicReceiverRejectTarget
+{
+    public function run($service, string $value): string
+    {
+        return $service->hidden($value);
+    }
+}
+
+it('rejects an uncoerced Redirect receiver with an unknown target type before mutation', function (): void {
+    expect(static function (): void {
+        (new ReflectionClass(CoerceDynamicReceiverRejectTarget::class))->inject(CoerceDynamicReceiverRejectMixin::class);
+    })->toThrow(InvalidArgumentException::class, 'unknown target type');
+
+    expect((new CoerceDynamicReceiverRejectTarget())->run(new CoerceReceiverService(), 'ok'))->toBe('ok!');
+});
+
 #[Mixin(CoerceTarget::class)]
 final class CoerceMixin
 {
@@ -99,11 +180,183 @@ final class CoerceTarget
     }
 }
 
+#[Mixin(CoerceUnionTarget::class)]
+final class CoerceUnionMixin
+{
+    private function __construct() {}
+
+    #[Inject('value', new At('HEAD'))]
+    public function inspectValue(CallbackInfo $info, int|float $value): void
+    {
+        $GLOBALS['coerce_union_value'] = $value;
+    }
+}
+
+final class CoerceUnionTarget
+{
+    public function value(int|float $value): int|float
+    {
+        return $value;
+    }
+}
+
+#[Mixin(CoerceUnionRejectTarget::class)]
+final class CoerceUnionRejectMixin
+{
+    private function __construct() {}
+
+    #[Inject('value', new At('HEAD'))]
+    public function inspectValue(CallbackInfo $info, string|bool $value): void {}
+}
+
+final class CoerceUnionRejectTarget
+{
+    public function value(int|float $value): int|float
+    {
+        return $value;
+    }
+}
+
+it('validates union callback parameters and rejects incompatible unions', function (): void {
+    (new ReflectionClass(CoerceUnionTarget::class))->inject(CoerceUnionMixin::class);
+
+    expect((new CoerceUnionTarget())->value(4))->toBe(4)
+        ->and($GLOBALS['coerce_union_value'])->toBe(4);
+    expect(static fn() => (new ReflectionClass(CoerceUnionRejectTarget::class))->inject(CoerceUnionRejectMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'expects string|bool');
+});
+
+#[Mixin(CoerceUnionCastTarget::class)]
+final class CoerceUnionCastMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[Inject('value', new At('HEAD'))]
+    public function inspectValue(CallbackInfo $info, float|string $value): void
+    {
+        $GLOBALS['coerce_union_cast_type'] = is_float($value);
+    }
+}
+
+final class CoerceUnionCastTarget
+{
+    public function value(int $value): int
+    {
+        return $value;
+    }
+}
+
+it('casts a coerced callback value to a compatible union arm', function (): void {
+    (new ReflectionClass(CoerceUnionCastTarget::class))->inject(CoerceUnionCastMixin::class);
+
+    expect((new CoerceUnionCastTarget())->value(4))->toBe(4)
+        ->and($GLOBALS['coerce_union_cast_type'])->toBeTrue();
+});
+
+interface CoerceIntersectionLeft
+{
+    public function marker(): bool;
+}
+
+interface CoerceIntersectionRight {}
+
+final class CoerceIntersectionValue implements CoerceIntersectionLeft, CoerceIntersectionRight
+{
+    public function marker(): bool
+    {
+        return true;
+    }
+}
+
+#[Mixin(CoerceIntersectionTarget::class)]
+final class CoerceIntersectionMixin
+{
+    private function __construct() {}
+
+    #[Inject('value', new At('HEAD'))]
+    public function inspectValue(CallbackInfo $info, CoerceIntersectionLeft $value): void
+    {
+        $GLOBALS['coerce_intersection_seen'] = $value->marker();
+    }
+}
+
+final class CoerceIntersectionTarget
+{
+    public function value(CoerceIntersectionLeft&CoerceIntersectionRight $value): string
+    {
+        return 'ok';
+    }
+}
+
+it('validates a callback against an intersection-typed target parameter', function (): void {
+    (new ReflectionClass(CoerceIntersectionTarget::class))->inject(CoerceIntersectionMixin::class);
+
+    expect((new CoerceIntersectionTarget())->value(new CoerceIntersectionValue()))->toBe('ok')
+        ->and($GLOBALS['coerce_intersection_seen'])->toBeTrue();
+});
+
+#[Mixin(CoerceIntersectionRejectTarget::class)]
+final class CoerceIntersectionRejectMixin
+{
+    private function __construct() {}
+
+    #[Inject('value', new At('HEAD'))]
+    public function inspectValue(CallbackInfo $info, stdClass $value): void {}
+}
+
+final class CoerceIntersectionRejectTarget
+{
+    public function value(CoerceIntersectionLeft&CoerceIntersectionRight $value): string
+    {
+        return 'ok';
+    }
+}
+
+it('rejects a callback type incompatible with every intersection component', function (): void {
+    expect(static fn() => (new ReflectionClass(CoerceIntersectionRejectTarget::class))->inject(CoerceIntersectionRejectMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'expects stdClass');
+});
+
 it('allows an explicitly coerced compatible callback parameter', function (): void {
     (new ReflectionClass(CoerceTarget::class))->inject(CoerceMixin::class);
 
     expect((new CoerceTarget())->value(2))->toBe(3)
         ->and((new CoerceTarget())->value(3))->toBe(0);
+});
+
+#[Mixin(CoerceParameterTarget::class)]
+final class CoerceParameterMixin
+{
+    private function __construct() {}
+
+    #[Inject('value', new At('HEAD'))]
+    public function inspectValue(CallbackInfo $info, #[Coerce] float $value): void
+    {
+        if ($value !== 2.0) {
+            $info->cancel('parameter coercion was not applied');
+        }
+    }
+}
+
+final class CoerceParameterTarget
+{
+    public function value(int $value): int
+    {
+        return $value + 1;
+    }
+}
+
+it('accepts and emits a cast for parameter-level callback Coerce', function (): void {
+    (new ReflectionClass(CoerceParameterTarget::class))->inject(CoerceParameterMixin::class);
+
+    expect((new CoerceParameterTarget())->value(2))->toBe(3)
+        ->and((new CoerceParameterTarget())->value(3))->toBe(0);
+
+    expect(array_filter(
+        Decompiler::decompile(CoerceParameterTarget::class . '::value')->instructions(),
+        static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 5,
+    ))->not->toBeEmpty();
 });
 
 #[Mixin(CoerceRejectTarget::class)]
@@ -224,7 +477,11 @@ it('allows Coerce on a Redirect field value with a compatible numeric type', fun
     $target->write(7);
 
     expect($target->value)->toBe(1)
-        ->and($GLOBALS['coerce_field_value'])->toBe(7.5);
+        ->and($GLOBALS['coerce_field_value'])->toBe(7.5)
+        ->and(array_filter(
+            Decompiler::decompile(CoerceFieldTarget::class . '::write')->instructions(),
+            static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 5,
+        ))->not->toBeEmpty();
 });
 
 #[Mixin(CoerceFieldReadTarget::class)]
@@ -254,6 +511,66 @@ it('casts a coerced Redirect field-read result to the property type', function (
     (new ReflectionClass(CoerceFieldReadTarget::class))->inject(CoerceFieldReadMixin::class);
 
     expect((new CoerceFieldReadTarget())->read())->toBe(3.0);
+});
+
+function coerceUnionFieldSource(bool $asFloat): int|float
+{
+    return $asFloat ? 3.5 : 3;
+}
+
+#[Mixin(CoerceUnionFieldTarget::class)]
+final class CoerceUnionFieldMixin
+{
+    private function __construct() {}
+
+    #[Redirect('read', new At('FIELD', '::value'))]
+    public function redirectField(): int|float
+    {
+        return coerceUnionFieldSource(false);
+    }
+}
+
+final class CoerceUnionFieldTarget
+{
+    public int|float $value = 1;
+
+    public function read(): int|float
+    {
+        return $this->value;
+    }
+}
+
+it('validates union Redirect field-read results', function (): void {
+    (new ReflectionClass(CoerceUnionFieldTarget::class))->inject(CoerceUnionFieldMixin::class);
+
+    expect((new CoerceUnionFieldTarget())->read())->toBe(3);
+});
+
+#[Mixin(CoerceUnionFieldRejectTarget::class)]
+final class CoerceUnionFieldRejectMixin
+{
+    private function __construct() {}
+
+    #[Redirect('read', new At('FIELD', '::value'))]
+    public function redirectField(): string|bool
+    {
+        return coerceUnionFieldSource(false) > 0 ? true : 'invalid';
+    }
+}
+
+final class CoerceUnionFieldRejectTarget
+{
+    public int|float $value = 1;
+
+    public function read(): int|float
+    {
+        return $this->value;
+    }
+}
+
+it('rejects incompatible union Redirect field-read results before mutation', function (): void {
+    expect(static fn() => (new ReflectionClass(CoerceUnionFieldRejectTarget::class))->inject(CoerceUnionFieldRejectMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'uses string|bool');
 });
 
 #[Mixin(CoerceFieldRejectTarget::class)]

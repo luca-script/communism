@@ -7,6 +7,7 @@ use Communism\Mixin\Mixin;
 use Communism\Mixin\Mutable;
 use Communism\Mixin\Overwrite;
 use Communism\Mixin\Shadow;
+use Communism\Reflect\ReflectionClass;
 
 #[Mixin(FinalMethodTarget::class)]
 final class FinalMethodMixin
@@ -115,7 +116,7 @@ final class ConflictingMutabilityTarget
 final class InvalidMutableTarget {}
 
 it('marks newly injected and overwritten methods final', function (): void {
-    (new Communism\Reflect\ReflectionClass(FinalMethodTarget::class))->inject(FinalMethodMixin::class);
+    (new ReflectionClass(FinalMethodTarget::class))->inject(FinalMethodMixin::class);
 
     $target = new FinalMethodTarget();
     expect($target->addedFinal())->toBe('added')
@@ -125,7 +126,7 @@ it('marks newly injected and overwritten methods final', function (): void {
 });
 
 it('removes readonly semantics from a mutable shadow before target code runs', function (): void {
-    (new Communism\Reflect\ReflectionClass(MutablePropertyTarget::class))->inject(MutablePropertyMixin::class);
+    (new ReflectionClass(MutablePropertyTarget::class))->inject(MutablePropertyMixin::class);
 
     $target = new MutablePropertyTarget(3);
     $target->update(9);
@@ -135,7 +136,7 @@ it('removes readonly semantics from a mutable shadow before target code runs', f
 });
 
 it('marks a shadowed property readonly when it is declared final', function (): void {
-    (new Communism\Reflect\ReflectionClass(FinalPropertyTarget::class))->inject(FinalPropertyMixin::class);
+    (new ReflectionClass(FinalPropertyTarget::class))->inject(FinalPropertyMixin::class);
 
     expect((new FinalPropertyTarget())->value())->toBe(5)
         ->and((new \ReflectionProperty(FinalPropertyTarget::class, 'value'))->isReadOnly())->toBeTrue();
@@ -143,7 +144,7 @@ it('marks a shadowed property readonly when it is declared final', function (): 
 
 it('rejects Mutable on a method that is not a shadow', function (): void {
     expect(function (): never {
-        (new Communism\Reflect\ReflectionClass(InvalidMutableTarget::class))->inject(InvalidMutableMixin::class);
+        (new ReflectionClass(InvalidMutableTarget::class))->inject(InvalidMutableMixin::class);
         throw new \RuntimeException('Mutable injection unexpectedly succeeded');
     })->toThrow(\InvalidArgumentException::class, 'requires #[Shadow]');
 
@@ -152,7 +153,7 @@ it('rejects Mutable on a method that is not a shadow', function (): void {
 
 it('rejects conflicting Final and Mutable declarations before mutation', function (): void {
     expect(function (): never {
-        (new Communism\Reflect\ReflectionClass(ConflictingMutabilityTarget::class))->inject(ConflictingMutabilityMixin::class);
+        (new ReflectionClass(ConflictingMutabilityTarget::class))->inject(ConflictingMutabilityMixin::class);
         throw new \RuntimeException('Conflicting mutability injection unexpectedly succeeded');
     })->toThrow(\InvalidArgumentException::class, 'cannot combine #[Final] and #[Mutable]');
 });

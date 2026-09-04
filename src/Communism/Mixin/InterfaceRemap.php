@@ -18,64 +18,27 @@
  *============================================================================*
  * :: Communism :: "In comrade PHP, all are public" ::                        *
  *----------------------------------------------------------------------------*
- * File: CallbackInfo.php                                                     *
+ * File: InterfaceRemap.php                                                   *
  * Consumer: Users                                                            *
- * Purpose: Virtual callback state exposed to injection handlers.             *
+ * Purpose: Controls PHP interface method-name remapping for mixins.          *
  *============================================================================*/
 
 declare(strict_types=1);
 
 namespace Communism\Mixin;
 
-use LogicException;
-
-/**
- * Virtual Mixin-style callback state.
- *
- * Needle lowers this type away when an injection is assembled. It cannot be
- * instantiated; target methods never receive a callback object at runtime.
- */
-class CallbackInfo
+/** PHP-native equivalent of Fabric Mixin's Interface.Remap modes. */
+enum InterfaceRemap: string
 {
-    public function __construct()
-    {
-        throw new LogicException('CallbackInfo is virtual and cannot be used at runtime');
-    }
+    /** Prefer the prefixed method, then an unprefixed PHP method if present. */
+    case ALL = 'ALL';
 
-    public function getId(): string
-    {
-        throw self::virtualError();
-    }
+    /** Require an unprefixed PHP method when the prefixed method is absent. */
+    case FORCE = 'FORCE';
 
-    public function getMethodName(): string
-    {
-        throw self::virtualError();
-    }
+    /** Only methods using the declared prefix may implement the interface. */
+    case ONLY_PREFIXED = 'ONLY_PREFIXED';
 
-    public function isCancellable(): bool
-    {
-        throw self::virtualError();
-    }
-
-    public function isCancelled(): bool
-    {
-        throw self::virtualError();
-    }
-
-    public function cancel(?string $reason = null): void
-    {
-        throw new LogicException($reason === null
-            ? 'CallbackInfo is virtual and cannot be used at runtime'
-            : 'CallbackInfo is virtual: ' . $reason);
-    }
-
-    public function __toString(): string
-    {
-        throw self::virtualError();
-    }
-
-    private static function virtualError(): LogicException
-    {
-        return new LogicException('CallbackInfo is virtual and cannot be used at runtime');
-    }
+    /** Do not use unprefixed PHP methods as interface implementations. */
+    case NONE = 'NONE';
 }

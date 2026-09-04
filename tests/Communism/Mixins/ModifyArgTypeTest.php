@@ -109,6 +109,94 @@ it('emits an explicit array cast for a coerced iterable ModifyArg result', funct
     expect((new ModifyArgArrayCastTarget())->value([1, 2, 3]))->toBe(3);
 });
 
+function modifyArgUnionResult(int|float $value): int|float
+{
+    return $value;
+}
+
+#[Mixin(ModifyArgUnionTarget::class)]
+final class ModifyArgUnionMixin
+{
+    private function __construct() {}
+
+    #[ModifyArg('value', new At('INVOKE', 'modifyArgUnionResult'), 0)]
+    public function preserveUnion(int|float $value): int|float
+    {
+        return $value + 1;
+    }
+}
+
+final class ModifyArgUnionTarget
+{
+    public function value(int|float $value): int|float
+    {
+        return modifyArgUnionResult($value);
+    }
+}
+
+it('validates union ModifyArg results', function (): void {
+    (new ReflectionClass(ModifyArgUnionTarget::class))->inject(ModifyArgUnionMixin::class);
+
+    expect((new ModifyArgUnionTarget())->value(2))->toBe(3);
+});
+
+#[Mixin(ModifyArgUnionRejectTarget::class)]
+final class ModifyArgUnionRejectMixin
+{
+    private function __construct() {}
+
+    #[ModifyArg('value', new At('INVOKE', 'modifyArgUnionResult'), 0)]
+    public function rejectUnion(int|float $value): string|bool
+    {
+        return $value > 0 ? true : 'invalid';
+    }
+}
+
+final class ModifyArgUnionRejectTarget
+{
+    public function value(int|float $value): int|float
+    {
+        return modifyArgUnionResult($value);
+    }
+}
+
+it('rejects incompatible union ModifyArg results before mutation', function (): void {
+    expect(static fn() => (new ReflectionClass(ModifyArgUnionRejectTarget::class))->inject(ModifyArgUnionRejectMixin::class))
+        ->toThrow(InvalidArgumentException::class, 'returns string|bool');
+});
+
+function modifyArgUnionCastSource(float $value): float
+{
+    return $value;
+}
+
+#[Mixin(ModifyArgUnionCastTarget::class)]
+final class ModifyArgUnionCastMixin
+{
+    private function __construct() {}
+
+    #[Coerce]
+    #[ModifyArg('value', new At('INVOKE', 'modifyArgUnionCastSource'), 0)]
+    public function coerceUnion(float $value): int|float
+    {
+        return $value > 0 ? 1 : $value;
+    }
+}
+
+final class ModifyArgUnionCastTarget
+{
+    public function value(float $value): float
+    {
+        return modifyArgUnionCastSource($value);
+    }
+}
+
+it('emits a cast for a coerced union ModifyArg result', function (): void {
+    (new ReflectionClass(ModifyArgUnionCastTarget::class))->inject(ModifyArgUnionCastMixin::class);
+
+    expect((new ModifyArgUnionCastTarget())->value(2.5))->toBe(1.0);
+});
+
 function modifyArgTypedInt(int $value): int
 {
     return $value * 2;

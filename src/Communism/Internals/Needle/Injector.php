@@ -35,7 +35,9 @@ use Communism\Mixin\InjectionConflictException;
 use Communism\Mixin\InjectionException;
 use Communism\Mixin\HandlerValidationException;
 use Communism\Mixin\Inject;
+use Communism\Mixin\Local;
 use Communism\Mixin\LocalCapture;
+use Communism\Mixin\Parameter;
 use InvalidArgumentException;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
@@ -50,6 +52,7 @@ use function is_array;
 use function is_int;
 use function is_string;
 use function str_starts_with;
+use function strrpos;
 use function strtolower;
 
 /**
@@ -494,15 +497,26 @@ final class Injector
         int $sourceCacheBase,
     ): array {
         if ($inject->mode === 'args') {
-            [$instructions, $return, $replacements] = self::prepareArgsHandler($target, $handler, $match, $temporaryOffset, $cacheOffset, $sourceCacheBase);
+            [$instructions, $return, $replacements, $coercionTemporaryCount] = self::prepareArgsHandler($target, $handler, $match, $temporaryOffset, $cacheOffset, $sourceCacheBase);
 
-            return [$instructions, $return, $replacements, 0];
+            return [$instructions, $return, $replacements, $coercionTemporaryCount];
         }
 
         $context = self::callbackContext($target, $handler, $inject, $match);
         if ($context === null) {
             $cvMap = self::modifierInputMap($target, $handler, $match);
             [$cvMap, $extraTemporaryCount] = self::mapHandlerLocals($target, $handler, $cvMap, [], $temporaryOffset);
+            $coercionPrelude = [];
+            $coercionTemporaryCount = 0;
+            if (in_array($match->type, ['constant', 'variable', 'field', 'new'], true)) {
+                [$cvMap, $coercionPrelude, $coercionTemporaryCount] = self::coerceCallbackInputs(
+                    $target,
+                    $handler,
+                    $cvMap,
+                    $temporaryOffset,
+                    $extraTemporaryCount,
+                );
+            }
             $instructions = self::executableInstructions($handler, $temporaryOffset, $cacheOffset, $cvMap, [], [], false, $sourceCacheBase);
             $return = self::returnInstruction($handler, $temporaryOffset, $cacheOffset, $cvMap);
             [$instructions, $return, $coercionTemporaryCount] = self::coerceReplacementReturn(
@@ -516,7 +530,7 @@ final class Injector
                 $extraTemporaryCount,
             );
 
-            return [$instructions, $return, null, $extraTemporaryCount + $coercionTemporaryCount];
+            return [[...$coercionPrelude, ...$instructions], $return, null, $extraTemporaryCount + $coercionTemporaryCount];
         }
 
         $lowered = self::lowerCallback($target, $handler, $context);
@@ -526,6 +540,13 @@ final class Injector
             $context['cvMap'],
             $context['callbackCvs'],
             $temporaryOffset,
+        );
+        [$cvMap, $coercionPrelude, $coercionTemporaryCount] = self::coerceCallbackInputs(
+            $target,
+            $handler,
+            $cvMap,
+            $temporaryOffset,
+            $extraTemporaryCount,
         );
         $instructions = self::executableInstructions(
             $lowered['body'],
@@ -538,7 +559,7 @@ final class Injector
             $sourceCacheBase,
         );
 
-        return [$instructions, null, null, $extraTemporaryCount];
+        return [[...$coercionPrelude, ...$instructions], null, null, $extraTemporaryCount + $coercionTemporaryCount];
     }
 
     /**
@@ -565,6 +586,7 @@ final class Injector
         }
 
         $targetType = null;
+        $targetTypeName = null;
         if ($match->type === 'invoke' && $match->action === 'arg' && $match->argumentIndex !== null) {
             $invocation = $match->invocation;
             $reflection = $invocation instanceof InvocationSpec ? self::invocationReflection($target, $invocation) : null;
@@ -589,27 +611,65 @@ final class Injector
                     $targetType = null;
                 }
             }
+        } elseif ($match->type === 'constant') {
+            $handlerReflection = self::reflection($handler->name);
+            $handlerParameters = $handlerReflection->getParameters();
+            if ($handlerReflection->getAttributes(Coerce::class) === []
+                && (!isset($handlerParameters[0]) || $handlerParameters[0]->getAttributes(Coerce::class) === [])
+            ) {
+                return [$instructions, $return, 0];
+            }
+            $instruction = $target->instruction($match->start);
+            foreach ([$instruction->result, $instruction->operand1, $instruction->operand2] as $operand) {
+                if ($operand->kind !== Operand::CONSTANT) {
+                    continue;
+                }
+                $targetTypeName = match (get_debug_type($operand->value)) {
+                    'int' => 'int',
+                    'float' => 'float',
+                    'bool' => 'bool',
+                    'array' => 'array',
+                    'string' => 'string',
+                    default => null,
+                };
+                break;
+            }
+        } elseif ($match->type === 'variable') {
+            $handlerReflection = self::reflection($handler->name);
+            $handlerParameters = $handlerReflection->getParameters();
+            if ($handlerReflection->getAttributes(Coerce::class) === []
+                && (!isset($handlerParameters[0]) || $handlerParameters[0]->getAttributes(Coerce::class) === [])
+            ) {
+                return [$instructions, $return, 0];
+            }
+            $instruction = $target->instruction($match->start);
+            $candidates = $match->variableMode === 'load'
+                ? [$instruction->operand1, $instruction->operand2]
+                : [$instruction->result, $instruction->operand1, $instruction->operand2];
+            foreach ($candidates as $operand) {
+                if (!in_array($operand->kind, [Operand::CV, Operand::VARIABLE], true)) {
+                    continue;
+                }
+                $targetTypeName = $target->variableType($operand);
+                if ($targetTypeName !== null) {
+                    break;
+                }
+            }
         }
-        if (!$targetType instanceof ReflectionNamedType) {
+        if ($targetType instanceof ReflectionNamedType) {
+            $targetTypeName = $targetType->getName();
+        }
+        if ($targetTypeName === null) {
             return [$instructions, $return, 0];
         }
         $handlerType = self::reflection($handler->name)->getReturnType();
-        if (!$handlerType instanceof ReflectionNamedType) {
+        if ($handlerType === null) {
             return [$instructions, $return, 0];
         }
-        $actual = $handlerType->getName();
-        $expected = $targetType->getName();
-        if ($actual === $expected || !self::canCoerce($actual, $expected)) {
-            return [$instructions, $return, 0];
-        }
-
         $temporary = $temporaryOffset + $handlerTemporaryCount + $extraTemporaryCount;
-        $castType = match ($expected) {
-            'int' => 4,
-            'float' => 5,
-            'array' => 7,
-            default => null,
-        };
+        $castType = $targetType instanceof \ReflectionType
+            ? self::reflectionCoercionCastType($targetType, $handlerType)
+            : self::namedCoercionCastType($targetTypeName, $handlerType);
         if ($castType === null) {
             return [$instructions, $return, 0];
         }
@@ -632,7 +692,7 @@ final class Injector
     }
 
     /**
-     * @return array{0: list<Instruction>, 1: ?Instruction, 2: ?array<int, Operand>}
+     * @return array{0: list<Instruction>, 1: ?Instruction, 2: ?array<int, Operand>, 3: int}
      */
     private static function prepareArgsHandler(
         MethodBody $target,
@@ -664,12 +724,13 @@ final class Injector
         $invocationReflection = $match->invocation instanceof InvocationSpec
             ? self::invocationReflection($target, $match->invocation)
             : null;
-        [$instructions, $replacements] = self::lowerArgs(
+        [$instructions, $replacements, $coercionCount] = self::lowerArgs(
             $target,
             $handler,
             $receive->result->value,
             $arguments,
             $invocationReflection,
+            self::reflection($handler->name)->getAttributes(Coerce::class) !== [],
         );
         $detachedReplacements = self::emptyOperandMap();
         foreach ($replacements as $index => $operand) {
@@ -684,7 +745,7 @@ final class Injector
 
         return [
             self::executableInstructions(
-                $handler->withInstructions($instructions),
+                $handler->withInstructions($instructions)->withTemporaryCount($handler->temporaryCount + $coercionCount),
                 $temporaryOffset,
                 $cacheOffset,
                 [],
@@ -695,6 +756,7 @@ final class Injector
             ),
             null,
             $detachedReplacements,
+            $coercionCount,
         ];
     }
 
@@ -748,6 +810,97 @@ final class Injector
         return [$cvMap, $extraTemporaryCount];
     }
 
+    /**
+     * Preserve compatible PHP parameter coercion for callback values after
+     * the handler call boundary has been removed by inlining.
+     *
+     * @param array<int, Operand> $cvMap
+     * @return array{0: array<int, Operand>, 1: list<Instruction>, 2: int}
+     */
+    private static function coerceCallbackInputs(
+        MethodBody $target,
+        MethodBody $handler,
+        array $cvMap,
+        int $temporaryOffset,
+        int $extraTemporaryCount,
+    ): array {
+        $reflection = self::reflection($handler->name);
+        $methodCoerce = $reflection->getAttributes(Coerce::class) !== [];
+        $receives = array_values(array_filter(
+            $handler->instructions(),
+            static fn(Instruction $instruction): bool => $instruction->name === 'RECV',
+        ));
+        $prelude = [];
+        $casts = 0;
+        foreach ($reflection->getParameters() as $index => $parameter) {
+            $receive = $receives[$index] ?? null;
+            if (!$receive instanceof Instruction || $receive->result->kind !== Operand::CV || !is_int($receive->result->value)) {
+                continue;
+            }
+            $mapped = $cvMap[$receive->result->value] ?? null;
+            $handlerType = $parameter->getType();
+            $targetType = $mapped === null
+                ? null
+                : ($target->variableType($mapped) ?? Matcher::inferOperandType($target, $mapped, $target->count()));
+            $coerce = $methodCoerce || $parameter->getAttributes(Coerce::class) !== [];
+            if (!$mapped instanceof Operand || $targetType === null || !$coerce) {
+                continue;
+            }
+            $candidates = self::namedTypes($handlerType);
+            if (in_array($targetType, ['int', 'float'], true)) {
+                usort($candidates, static function (string $left, string $right): int {
+                    $rank = static fn(string $type): int => match ($type) {
+                        'int', 'float' => 0,
+                        'bool' => 1,
+                        'string' => 2,
+                        default => 3,
+                    };
+
+                    return $rank($left) <=> $rank($right);
+                });
+            }
+            $expected = null;
+            foreach ($candidates as $candidate) {
+                if ($candidate === $targetType || self::typeAccepts($candidate, $targetType)) {
+                    $expected = null;
+                    break;
+                }
+                if ($expected === null && self::canCoerce($targetType, $candidate)) {
+                    $expected = $candidate;
+                }
+            }
+            if ($expected === null) {
+                continue;
+            }
+            $castType = match ($expected) {
+                'bool' => 3,
+                'int' => 4,
+                'float' => 5,
+                'string' => 6,
+                'array' => 7,
+                default => null,
+            };
+            if ($castType === null) {
+                continue;
+            }
+            $temporary = $temporaryOffset + $handler->temporaryCount + $extraTemporaryCount + $casts;
+            $castOperand = Operand::temporary(($temporary + 5) * 16);
+            $prelude[] = new Instruction(
+                Zendful::opcodeId('CAST'),
+                'CAST',
+                $castOperand,
+                $mapped,
+                Operand::unused(),
+                $castType,
+                $receive->line,
+            );
+            $cvMap[$receive->result->value] = $castOperand;
+            $casts++;
+        }
+
+        return [$cvMap, $prelude, $casts];
+    }
+
     private static function isArgsParameter(ReflectionParameter $parameter): bool
     {
         $type = $parameter->getType();
@@ -771,7 +924,7 @@ final class Injector
 
     /**
      * @param list<Operand> $arguments
-     * @return array{0: list<Instruction>, 1: array<int, Operand>}
+     * @return array{0: list<Instruction>, 1: array<int, Operand>, 2: int}
      */
     private static function lowerArgs(
         MethodBody $target,
@@ -779,11 +932,13 @@ final class Injector
         int $argsCv,
         array $arguments,
         ?ReflectionFunctionAbstract $invocationReflection = null,
+        bool $coerce = false,
     ): array {
         $source = $handler->instructions();
         $rewritten = [];
         $replacements = self::emptyOperandMap();
         $values = self::emptyValueMap();
+        $coercionCount = 0;
         for ($index = 0; $index < count($source); $index++) {
             $instruction = $source[$index];
             if ($instruction->name === 'RETURN') {
@@ -806,7 +961,7 @@ final class Injector
             }
             $inner = $callEnd === $index + 1
                 ? []
-                : self::lowerArgsRange($target, $source, $index + 1, $callEnd - 1, $argsCv, $arguments, $replacements, $invocationReflection);
+                : self::lowerArgsRange($target, $source, $index + 1, $callEnd - 1, $argsCv, $arguments, $replacements, $invocationReflection, $coerce);
             if ($instruction->operand2->kind !== Operand::CONSTANT || !is_string($instruction->operand2->value)) {
                 // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('A virtual Args method name must be a string');
@@ -827,7 +982,22 @@ final class Injector
                 if ($argumentIndex === null || !isset($sends[1])) {
                     throw new InvalidArgumentException('Args::set requires an argument index and value');
                 }
-                $replacements[$argumentIndex] = $sends[1];
+                $replacement = self::validateArgsValue($invocationReflection, $argumentIndex, $sends[1], $coerce);
+                [$replacement, $cast, $coercionCount] = self::coerceArgsOperand(
+                    $target,
+                    $handler,
+                    $invocationReflection,
+                    $argumentIndex,
+                    $replacement,
+                    $coerce,
+                    $coercionCount,
+                    $index,
+                    $arguments,
+                );
+                if ($cast !== null) {
+                    $inner[] = $cast;
+                }
+                $replacements[$argumentIndex] = $replacement;
             } elseif ($method === 'setall') {
                 $setAll = count($sends) === 1 ? self::staticArrayOperand($source, $sends[0], $index) : null;
                 $setAllOperands = $setAll === null && count($sends) === 1
@@ -859,13 +1029,44 @@ final class Injector
                     if (!is_null($value) && !is_bool($value) && !is_int($value) && !is_float($value) && !is_string($value)) {
                         throw new InvalidArgumentException('Args::setAll only supports scalar values');
                     }
-                    $replacements[$argumentIndex] = Operand::constant($value, 0);
+                    $operand = Operand::constant($value, 0);
+                    $replacement = self::validateArgsValue($invocationReflection, $argumentIndex, $operand, $coerce);
+                    [$replacement, $cast, $coercionCount] = self::coerceArgsOperand(
+                        $target,
+                        $handler,
+                        $invocationReflection,
+                        $argumentIndex,
+                        $replacement,
+                        $coerce,
+                        $coercionCount,
+                        $index,
+                        $arguments,
+                    );
+                    if ($cast !== null) {
+                        $inner[] = $cast;
+                    }
+                    $replacements[$argumentIndex] = $replacement;
                 }
                 foreach ($setAllOperands ?? [] as $argumentIndex => $operand) {
                     if (!in_array($operand->kind, [Operand::CONSTANT, Operand::CV, Operand::TEMPORARY, Operand::VARIABLE], true)) {
                         throw new InvalidArgumentException('Args::setAll only supports scalar operands');
                     }
-                    $replacements[$argumentIndex] = $operand;
+                    $replacement = self::validateArgsValue($invocationReflection, $argumentIndex, $operand, $coerce);
+                    [$replacement, $cast, $coercionCount] = self::coerceArgsOperand(
+                        $target,
+                        $handler,
+                        $invocationReflection,
+                        $argumentIndex,
+                        $replacement,
+                        $coerce,
+                        $coercionCount,
+                        $index,
+                        $arguments,
+                    );
+                    if ($cast !== null) {
+                        $inner[] = $cast;
+                    }
+                    $replacements[$argumentIndex] = $replacement;
                 }
                 // The local is only an intermediate carrier for a literal
                 // array. Keeping its ASSIGN would force an array literal into
@@ -910,7 +1111,419 @@ final class Injector
             $index = $callEnd;
         }
 
-        return [$rewritten, $replacements];
+        return [$rewritten, $replacements, $coercionCount];
+    }
+
+    /**
+     * Emit an explicit numeric cast for a typed runtime operand. The handler
+     * call boundary is removed during inlining, so PHP's normal argument
+     * coercion must be represented in the target instruction stream.
+     *
+     * @param list<Operand> $arguments
+     * @return array{0: Operand, 1: ?Instruction, 2: int}
+     */
+    private static function coerceArgsOperand(
+        MethodBody $target,
+        MethodBody $handler,
+        ?ReflectionFunctionAbstract $reflection,
+        int $index,
+        Operand $operand,
+        bool $coerce,
+        int $coercionCount,
+        int $before,
+        array $arguments,
+    ): array {
+        if (!$coerce || $reflection === null || $operand->kind === Operand::CONSTANT) {
+            return [$operand, null, $coercionCount];
+        }
+        $parameters = $reflection->getParameters();
+        $parameter = $parameters[$index] ?? null;
+        if (!$parameter instanceof ReflectionParameter) {
+            $last = $parameters[array_key_last($parameters)] ?? null;
+            $parameter = $last instanceof ReflectionParameter && $last->isVariadic() ? $last : null;
+        }
+        $types = self::namedTypes($parameter?->getType());
+        if ($types === [] || in_array('mixed', $types, true)
+            || count(array_intersect($types, ['bool', 'int', 'float', 'string', 'array'])) === 0
+        ) {
+            return [$operand, null, $coercionCount];
+        }
+        $actual = in_array($operand, $arguments, true)
+            ? Matcher::inferOperandType($target, $operand, $target->count())
+            : Matcher::inferOperandType($handler, $operand, $before);
+        if ($actual === null) {
+            return [$operand, null, $coercionCount];
+        }
+        foreach ($types as $type) {
+            if ($actual === $type || self::typeAccepts($type, $actual)) {
+                return [$operand, null, $coercionCount];
+            }
+        }
+        $expected = null;
+        foreach ($types as $type) {
+            if (self::canCoerce($actual, $type)) {
+                $expected = $type;
+                break;
+            }
+        }
+        if ($expected === null) {
+            return [$operand, null, $coercionCount];
+        }
+        $castType = match ($expected) {
+            'bool' => 3,
+            'int' => 4,
+            'float' => 5,
+            'string' => 6,
+            'array' => 7,
+            default => null,
+        };
+        if ($castType === null) {
+            return [$operand, null, $coercionCount];
+        }
+        $temporary = $handler->temporaryCount + $coercionCount;
+        $castOperand = Operand::temporary(($temporary + 5) * 16);
+        $cast = new Instruction(
+            Zendful::opcodeId('CAST'),
+            'CAST',
+            $castOperand,
+            $operand,
+            Operand::unused(),
+            $castType,
+        );
+
+        return [$castOperand, $cast, $coercionCount + 1];
+    }
+
+    private static function validateArgsValue(
+        ?ReflectionFunctionAbstract $reflection,
+        int $index,
+        Operand $operand,
+        bool $coerce = false,
+    ): Operand {
+        if ($reflection === null || $operand->kind !== Operand::CONSTANT) {
+            return $operand;
+        }
+        $parameters = $reflection->getParameters();
+        $parameter = $parameters[$index] ?? null;
+        if (!$parameter instanceof ReflectionParameter) {
+            $last = $parameters[array_key_last($parameters)] ?? null;
+            $parameter = $last instanceof ReflectionParameter && $last->isVariadic() ? $last : null;
+        }
+        $types = self::namedTypes($parameter?->getType());
+        if ($types === [] || in_array('mixed', $types, true)) {
+            return $operand;
+        }
+        $actual = match (get_debug_type($operand->value)) {
+            'int' => 'int',
+            'float' => 'float',
+            'bool' => 'bool',
+            'string' => 'string',
+            'array' => 'array',
+            'null' => 'null',
+            default => get_debug_type($operand->value),
+        };
+        foreach ($types as $type) {
+            if ($actual === $type || self::typeAccepts($type, $actual)) {
+                return $operand;
+            }
+        }
+        if ($coerce) {
+            foreach ($types as $expected) {
+                if (!self::canCoerce($actual, $expected)) {
+                    continue;
+                }
+                if ($expected === 'int' && (is_int($operand->value) || is_float($operand->value))) {
+                    return $operand->withValue((int) $operand->value);
+                }
+                if ($expected === 'float' && (is_int($operand->value) || is_float($operand->value))) {
+                    return $operand->withValue((float) $operand->value);
+                }
+            }
+        }
+        $expected = implode('|', $types);
+        if (in_array($expected, ['int', 'float', 'bool', 'string', 'array'], true) || count($types) > 1) {
+            throw new InvalidArgumentException(sprintf(
+                'Args replacement at index %d provides %s, but the invocation requires %s',
+                $index,
+                $actual,
+                $expected,
+            ));
+        }
+
+        return $operand;
+    }
+
+    /** @return list<string> */
+    private static function namedTypes(?\ReflectionType $type): array
+    {
+        if ($type instanceof ReflectionNamedType) {
+            return [$type->getName()];
+        }
+        if ($type instanceof \ReflectionUnionType) {
+            $names = [];
+            foreach ($type->getTypes() as $unionType) {
+                if ($unionType instanceof ReflectionNamedType) {
+                    $names[] = $unionType->getName();
+                }
+            }
+
+            return $names;
+        }
+
+        return [];
+    }
+
+    private static function reflectionTypeAccepts(\ReflectionType $expected, \ReflectionType $actual): bool
+    {
+        if ($actual instanceof \ReflectionUnionType) {
+            foreach ($actual->getTypes() as $actualType) {
+                if (!self::reflectionTypeAccepts($expected, $actualType)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        if ($expected instanceof \ReflectionUnionType) {
+            foreach ($expected->getTypes() as $expectedType) {
+                if (self::reflectionTypeAccepts($expectedType, $actual)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        if ($expected instanceof \ReflectionIntersectionType) {
+            foreach ($expected->getTypes() as $expectedType) {
+                if (!self::reflectionTypeAccepts($expectedType, $actual)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        if ($actual instanceof \ReflectionIntersectionType) {
+            foreach ($actual->getTypes() as $actualType) {
+                if (self::reflectionTypeAccepts($expected, $actualType)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $expectedTypes = self::namedTypes($expected);
+        $actualTypes = self::namedTypes($actual);
+        if ($expectedTypes === [] || $actualTypes === []) {
+            return false;
+        }
+
+        foreach ($actualTypes as $actualType) {
+            $accepted = false;
+            foreach ($expectedTypes as $expectedType) {
+                if (self::typeAccepts($expectedType, $actualType)) {
+                    $accepted = true;
+                    break;
+                }
+            }
+            if (!$accepted) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function reflectionTypeCanCoerce(\ReflectionType $expected, \ReflectionType $actual): bool
+    {
+        $expectedTypes = self::namedTypes($expected);
+        $actualTypes = self::namedTypes($actual);
+        if ($expectedTypes === [] || $actualTypes === []) {
+            return false;
+        }
+
+        foreach ($actualTypes as $actualType) {
+            $coercible = false;
+            foreach ($expectedTypes as $expectedType) {
+                if (self::canCoerce($actualType, $expectedType)) {
+                    $coercible = true;
+                    break;
+                }
+            }
+            if (!$coercible) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function reflectionTypeAcceptsName(\ReflectionType $expected, string $actual): bool
+    {
+        if ($expected instanceof \ReflectionUnionType) {
+            foreach ($expected->getTypes() as $expectedType) {
+                if (self::reflectionTypeAcceptsName($expectedType, $actual)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        if ($expected instanceof \ReflectionIntersectionType) {
+            foreach ($expected->getTypes() as $expectedType) {
+                if (!self::reflectionTypeAcceptsName($expectedType, $actual)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return $expected instanceof ReflectionNamedType && self::typeAccepts($expected->getName(), $actual);
+    }
+
+    private static function reflectionTypeCanCoerceName(\ReflectionType $expected, string $actual): bool
+    {
+        if ($expected instanceof \ReflectionUnionType) {
+            foreach ($expected->getTypes() as $expectedType) {
+                if (self::reflectionTypeCanCoerceName($expectedType, $actual)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        if (!$expected instanceof ReflectionNamedType) {
+            return false;
+        }
+
+        return self::canCoerce($actual, $expected->getName());
+    }
+
+    private static function reflectionCoercionCastType(\ReflectionType $expected, \ReflectionType $actual): ?int
+    {
+        if (self::reflectionTypeAccepts($expected, $actual) || !self::reflectionTypeCanCoerce($expected, $actual)) {
+            return null;
+        }
+        $expectedTypes = self::namedTypes($expected);
+        if (in_array('int', self::namedTypes($actual), true) || in_array('float', self::namedTypes($actual), true)) {
+            usort($expectedTypes, static function (string $left, string $right): int {
+                $rank = static fn(string $type): int => match ($type) {
+                    'int', 'float' => 0,
+                    'bool' => 1,
+                    'string' => 2,
+                    default => 3,
+                };
+
+                return $rank($left) <=> $rank($right);
+            });
+        }
+        foreach ($expectedTypes as $expectedType) {
+            $castType = self::namedCoercionCastType($expectedType, $actual);
+            if ($castType !== null) {
+                return $castType;
+            }
+        }
+
+        return null;
+    }
+
+    private static function namedCoercionCastType(?string $expected, \ReflectionType $actual): ?int
+    {
+        if ($expected === null) {
+            return null;
+        }
+
+        $actualTypes = self::namedTypes($actual);
+        if ($actualTypes === []) {
+            return null;
+        }
+        $needsCast = false;
+        foreach ($actualTypes as $actualType) {
+            if (self::typeExpressionAccepts($expected, $actualType)) {
+                continue;
+            }
+            $coercible = false;
+            foreach (self::typeExpressionArms($expected) as $expectedArm) {
+                if (!str_contains($expectedArm, '&') && self::canCoerce($actualType, $expectedArm)) {
+                    $coercible = true;
+                    break;
+                }
+            }
+            if (!$coercible) {
+                return null;
+            }
+            $needsCast = true;
+        }
+        if (!$needsCast) {
+            return null;
+        }
+
+        $expectedArms = self::typeExpressionArms($expected);
+        if (array_intersect(self::namedTypes($actual), ['int', 'float']) !== []) {
+            usort($expectedArms, static function (string $left, string $right): int {
+                $rank = static fn(string $type): int => match ($type) {
+                    'int', 'float' => 0,
+                    'bool' => 1,
+                    'string' => 2,
+                    default => 3,
+                };
+
+                return $rank($left) <=> $rank($right);
+            });
+        }
+        foreach ($expectedArms as $expectedArm) {
+            if (str_contains($expectedArm, '&')) {
+                continue;
+            }
+            $armIsCoercible = false;
+            foreach ($actualTypes as $actualType) {
+                if (self::canCoerce($actualType, $expectedArm)) {
+                    $armIsCoercible = true;
+                    break;
+                }
+            }
+            if (!$armIsCoercible) {
+                continue;
+            }
+            $castType = match ($expectedArm) {
+                'bool' => 3,
+                'int' => 4,
+                'float' => 5,
+                'string' => 6,
+                'array' => 7,
+                default => null,
+            };
+            if ($castType !== null) {
+                return $castType;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return list<string> */
+    private static function typeExpressionArms(string $type): array
+    {
+        return array_map(static fn(string $arm): string => trim($arm), explode('|', $type));
+    }
+
+    private static function typeExpressionAccepts(string $expected, string $actual): bool
+    {
+        foreach (self::typeExpressionArms($expected) as $unionArm) {
+            $matches = true;
+            foreach (explode('&', $unionArm) as $intersectionArm) {
+                if (!self::typeAccepts(trim($intersectionArm), $actual)) {
+                    $matches = false;
+                    break;
+                }
+            }
+            if ($matches) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -936,8 +1549,74 @@ final class Injector
             if ($instruction->operand2->kind === Operand::CONSTANT && is_array($instruction->operand2->value)) {
                 return $instruction->operand2->value;
             }
+            if (in_array($instruction->operand2->kind, [Operand::TEMPORARY, Operand::VARIABLE], true)) {
+                for ($producer = $index - 1; $producer >= 0; $producer--) {
+                    $call = $source[$producer];
+                    if (!in_array($call->name, ['DO_FCALL', 'DO_FCALL_BY_NAME', 'DO_UCALL'], true)
+                        || $call->result->kind !== $instruction->operand2->kind
+                        || $call->result->value !== $instruction->operand2->value
+                    ) {
+                        continue;
+                    }
+                    $init = $source[$producer - 1] ?? null;
+                    if ($init instanceof Instruction
+                        && $init->name === 'INIT_STATIC_METHOD_CALL'
+                        && $init->operand1->kind === Operand::CONSTANT
+                        && is_string($init->operand1->value)
+                        && $init->operand2->kind === Operand::CONSTANT
+                        && is_string($init->operand2->value)
+                        && class_exists($init->operand1->value)
+                    ) {
+                        try {
+                            $reflection = new \ReflectionMethod($init->operand1->value, $init->operand2->value);
+                            if (!$reflection->isUserDefined() || !$reflection->isStatic() || $reflection->getNumberOfParameters() !== 0) {
+                                return null;
+                            }
+
+                            return self::literalArrayReturn(Decompiler::decompile($reflection->getDeclaringClass()->getName() . '::' . $reflection->getName()));
+                        } catch (\Throwable) {
+                            return null;
+                        }
+                    }
+                    $function = $init instanceof Instruction
+                        && in_array($init->name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME', 'INIT_NS_FCALL_BY_NAME'], true)
+                        && $init->operand2->kind === Operand::CONSTANT
+                        && is_string($init->operand2->value)
+                        ? $init->operand2->value
+                        : null;
+                    if ($function === null || !function_exists($function)) {
+                        return null;
+                    }
+                    try {
+                        $reflection = new \ReflectionFunction($function);
+                        if (!$reflection->isUserDefined() || $reflection->getNumberOfParameters() !== 0) {
+                            return null;
+                        }
+                        $body = Decompiler::decompile($function);
+                    } catch (\Throwable) {
+                        return null;
+                    }
+                    return self::literalArrayReturn($body);
+                }
+            }
 
             return null;
+        }
+
+        return null;
+    }
+
+    /** @return list<mixed>|null */
+    private static function literalArrayReturn(MethodBody $body): ?array
+    {
+        foreach ($body->instructions() as $instruction) {
+            if ($instruction->name === 'RETURN'
+                && $instruction->operand1->kind === Operand::CONSTANT
+                && is_array($instruction->operand1->value)
+                && array_is_list($instruction->operand1->value)
+            ) {
+                return $instruction->operand1->value;
+            }
         }
 
         return null;
@@ -1008,11 +1687,12 @@ final class Injector
         array $arguments,
         array &$replacements,
         ?ReflectionFunctionAbstract $invocationReflection,
+        bool $coerce,
     ): array {
         $body = new MethodBody('', null, 0, 0, $source);
         $subset = array_slice($source, $start, $end - $start + 1);
         $body = $body->withInstructions($subset);
-        [$lowered, $nestedReplacements] = self::lowerArgs($target, $body, $argsCv, $arguments, $invocationReflection);
+        [$lowered, $nestedReplacements, $_nestedCoercionCount] = self::lowerArgs($target, $body, $argsCv, $arguments, $invocationReflection, $coerce);
         foreach ($nestedReplacements as $index => $operand) {
             $replacements[$index] = $operand;
         }
@@ -1211,6 +1891,7 @@ final class Injector
      *     callbackCvs: list<int>,
      *     callbackReturnable: bool,
      *     cancellable: bool,
+     *     callbackId: string,
      *     cvMap: array<int, Operand>,
      *     returnOperand: Operand,
      *     preserveReturnOperand: bool,
@@ -1249,6 +1930,8 @@ final class Injector
             $target->instructions(),
             static fn(Instruction $instruction): bool => $instruction->name === 'RECV',
         ));
+        $targetLocals = self::positionalLocals($target, $targetParameters);
+        $positionalLocal = 0;
         $targetArgument = 0;
 
         foreach ($handlerParameters as $parameterIndex => $parameter) {
@@ -1265,8 +1948,98 @@ final class Injector
                 continue;
             }
 
+            $localDeclaration = $parameter->getAttributes(Local::class);
+            $parameterDeclaration = $parameter->getAttributes(Parameter::class);
+            if ($localDeclaration !== [] && $parameterDeclaration !== []) {
+                throw new CaptureException(sprintf('Callback parameter $%s cannot be both Local and Parameter', $parameter->getName()));
+            }
+            if (count($localDeclaration) > 1 || count($parameterDeclaration) > 1) {
+                throw new CaptureException(sprintf('Callback parameter $%s has duplicate binding declarations', $parameter->getName()));
+            }
+
+            if ($localDeclaration !== []) {
+                if ($inject->locals === LocalCapture::NO_CAPTURE) {
+                    throw new CaptureException(sprintf('Callback parameter $%s explicitly requests a local while local capture is disabled', $parameter->getName()));
+                }
+                $localName = $localDeclaration[0]->newInstance()->name ?? $parameter->getName();
+                foreach ($targetParameters as $targetParameter) {
+                    if ($targetParameter->getName() === $localName) {
+                        throw new CaptureException(sprintf('Callback parameter $%s explicitly requests a local but names a target parameter', $parameter->getName()));
+                    }
+                }
+                $local = $target->variableOperand($localName);
+                if ($local === null) {
+                    throw new CaptureException(sprintf('Callback local $%s cannot be captured from %s', $localName, $target->name));
+                }
+                $localPoint = $match->action === 'after' || $match->type === 'invoke_assign'
+                    ? $match->end + 1
+                    : $match->start;
+                if (!self::localAvailableAt($target, $local, $localPoint)) {
+                    throw new CaptureException(sprintf('Callback local $%s is not initialized at %s', $localName, $inject->at->description()));
+                }
+                self::validateCapturedLocalType(
+                    $parameter,
+                    self::capturedLocalType($target, $local, $localPoint),
+                    $handler->name,
+                    $handlerReflection->getAttributes(Coerce::class) !== [] || $parameter->getAttributes(Coerce::class) !== [],
+                );
+                $cvMap[$sourceReceive->result->value] = $local;
+                continue;
+            }
+
+            if ($parameterDeclaration !== []) {
+                $binding = $parameterDeclaration[0]->newInstance();
+                $targetParameterIndex = $binding->ordinal;
+                if ($targetParameterIndex === null) {
+                    $targetName = $binding->name ?? $parameter->getName();
+                    foreach ($targetParameters as $index => $candidate) {
+                        if ($candidate->getName() === $targetName) {
+                            $targetParameterIndex = $index;
+                            break;
+                        }
+                    }
+                }
+                $selectedParameter = $targetParameterIndex === null ? null : ($targetParameters[$targetParameterIndex] ?? null);
+                if (!$selectedParameter instanceof ReflectionParameter) {
+                    throw new CaptureException(sprintf('Callback parameter $%s cannot resolve its target parameter', $parameter->getName()));
+                }
+                $selectedOperand = $target->variableOperand($selectedParameter->getName());
+                if ($selectedOperand === null) {
+                    throw new CaptureException(sprintf('Callback parameter $%s cannot capture target parameter $%s', $parameter->getName(), $selectedParameter->getName()));
+                }
+                self::validateCallbackParameterType($parameter, $selectedParameter, $handler->name, $handlerReflection->getAttributes(Coerce::class) !== [] || $parameter->getAttributes(Coerce::class) !== []);
+                $cvMap[$sourceReceive->result->value] = $selectedOperand;
+                $targetArgument = max($targetArgument, $selectedParameter->getPosition() + 1);
+                continue;
+            }
+
             $namedTarget = $target->variableOperand($parameter->getName());
             if ($namedTarget !== null) {
+                $namedParameter = null;
+                foreach ($targetParameters as $candidate) {
+                    if ($candidate->getName() === $parameter->getName()) {
+                        $namedParameter = $candidate;
+                        break;
+                    }
+                }
+                $localPoint = $match->action === 'after' || $match->type === 'invoke_assign'
+                    ? $match->end + 1
+                    : $match->start;
+                if ($namedParameter === null && !self::localAvailableAt($target, $namedTarget, $localPoint)) {
+                    throw new CaptureException(sprintf(
+                        'Callback local $%s is not initialized at %s',
+                        $parameter->getName(),
+                        $inject->at->description(),
+                    ));
+                }
+                if ($namedParameter === null) {
+                    self::validateCapturedLocalType(
+                        $parameter,
+                        self::capturedLocalType($target, $namedTarget, $localPoint),
+                        $handler->name,
+                        $handlerReflection->getAttributes(Coerce::class) !== [] || $parameter->getAttributes(Coerce::class) !== [],
+                    );
+                }
                 if ($inject->locals === LocalCapture::NO_CAPTURE) {
                     $targetParameter = $targetParameters[$targetArgument] ?? null;
                     if (!$targetParameter instanceof ReflectionParameter || $targetParameter->getName() !== $parameter->getName()) {
@@ -1276,12 +2049,12 @@ final class Injector
                             $handler->name,
                         ));
                     }
-                    self::validateCallbackParameterType($parameter, $targetParameter, $handler->name, $handlerReflection->getAttributes(Coerce::class) !== []);
+                    self::validateCallbackParameterType($parameter, $targetParameter, $handler->name, $handlerReflection->getAttributes(Coerce::class) !== [] || $parameter->getAttributes(Coerce::class) !== []);
                 }
                 $cvMap[$sourceReceive->result->value] = $namedTarget;
                 $positionalTarget = $targetParameters[$targetArgument] ?? null;
                 if ($positionalTarget instanceof ReflectionParameter && $positionalTarget->getName() === $parameter->getName()) {
-                    self::validateCallbackParameterType($parameter, $positionalTarget, $handler->name, $handlerReflection->getAttributes(Coerce::class) !== []);
+                    self::validateCallbackParameterType($parameter, $positionalTarget, $handler->name, $handlerReflection->getAttributes(Coerce::class) !== [] || $parameter->getAttributes(Coerce::class) !== []);
                     $targetArgument++;
                 }
                 continue;
@@ -1293,7 +2066,7 @@ final class Injector
             if ($targetParameter instanceof ReflectionParameter) {
                 $targetOperand = $target->variableOperand($targetParameter->getName());
                 if ($targetOperand !== null) {
-                    self::validateCallbackParameterType($parameter, $targetParameter, $handler->name, $handlerReflection->getAttributes(Coerce::class) !== []);
+                    self::validateCallbackParameterType($parameter, $targetParameter, $handler->name, $handlerReflection->getAttributes(Coerce::class) !== [] || $parameter->getAttributes(Coerce::class) !== []);
                     $cvMap[$sourceReceive->result->value] = $targetOperand;
                     $mapped = true;
                 }
@@ -1302,6 +2075,35 @@ final class Injector
                 $mapped = true;
             }
             if (!$mapped) {
+                $local = $targetLocals[$positionalLocal] ?? null;
+                if ($local instanceof Operand) {
+                    if ($inject->locals === LocalCapture::NO_CAPTURE) {
+                        throw new CaptureException(sprintf(
+                            'Callback parameter $%s in %s is a local and local capture is disabled',
+                            $parameter->getName(),
+                            $handler->name,
+                        ));
+                    }
+                    $localPoint = $match->action === 'after' || $match->type === 'invoke_assign'
+                        ? $match->end + 1
+                        : $match->start;
+                    if (!self::localAvailableAt($target, $local, $localPoint)) {
+                        throw new CaptureException(sprintf(
+                            'Callback local $%s is not initialized at %s',
+                            $target->variableName($local) ?? (string) $positionalLocal,
+                            $inject->at->description(),
+                        ));
+                    }
+                    self::validateCapturedLocalType(
+                        $parameter,
+                        self::capturedLocalType($target, $local, $localPoint),
+                        $handler->name,
+                        $handlerReflection->getAttributes(Coerce::class) !== [] || $parameter->getAttributes(Coerce::class) !== [],
+                    );
+                    $cvMap[$sourceReceive->result->value] = $local;
+                    $positionalLocal++;
+                    continue;
+                }
                 throw new CaptureException(sprintf(
                     'Callback parameter $%s in %s cannot be captured from %s',
                     $parameter->getName(),
@@ -1328,10 +2130,76 @@ final class Injector
             'callbackCvs' => $callbackCvs,
             'callbackReturnable' => $callbackReturnable,
             'cancellable' => $inject->cancellable,
+            'callbackId' => $inject->id !== '' ? $inject->id : self::targetMethodName($target->name),
             'cvMap' => $cvMap,
             'returnOperand' => $returnOperand,
             'preserveReturnOperand' => $preserveReturnOperand,
         ];
+    }
+
+    private static function localAvailableAt(MethodBody $target, Operand $local, int $instructionIndex): bool
+    {
+        if ($local->kind !== Operand::CV || !is_int($local->value)) {
+            return false;
+        }
+
+        $localName = $target->variableName($local);
+        foreach (self::reflection($target->name)->getParameters() as $parameter) {
+            if ($parameter->getName() === $localName) {
+                return true;
+            }
+        }
+
+        foreach (array_slice($target->instructions(), 0, $instructionIndex) as $instruction) {
+            if ($instruction->result->kind === Operand::CV && $instruction->result->value === $local->value) {
+                return true;
+            }
+            if (in_array($instruction->name, ['ASSIGN', 'ASSIGN_OP', 'PRE_INC', 'PRE_DEC', 'POST_INC', 'POST_DEC'], true)
+                && $instruction->operand1->kind === Operand::CV
+                && $instruction->operand1->value === $local->value
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function capturedLocalType(MethodBody $target, Operand $local, int $instructionIndex): ?string
+    {
+        return $target->variableType($local) ?? Matcher::inferOperandType($target, $local, $instructionIndex);
+    }
+
+    /**
+     * Return target CVs which are not method parameters in declaration order.
+     * PHP bytecode keeps these locals as named CVs, allowing a Mixin-style
+     * callback to capture them positionally after the target arguments.
+     *
+     * @param list<ReflectionParameter> $parameters
+     * @return list<Operand>
+     */
+    private static function positionalLocals(MethodBody $target, array $parameters): array
+    {
+        $parameterNames = [];
+        foreach ($parameters as $parameter) {
+            $parameterNames[$parameter->getName()] = true;
+        }
+        $locals = [];
+        foreach ($target->instructions() as $instruction) {
+            foreach ([$instruction->result, $instruction->operand1, $instruction->operand2] as $operand) {
+                if ($operand->kind !== Operand::CV || !is_int($operand->value)) {
+                    continue;
+                }
+                $name = $target->variableName($operand);
+                if ($name === null || $name === 'this' || isset($parameterNames[$name])) {
+                    continue;
+                }
+                $locals[$operand->value] = $operand;
+            }
+        }
+        ksort($locals);
+
+        return array_values($locals);
     }
 
     private static function validateCallbackParameterType(
@@ -1342,7 +2210,7 @@ final class Injector
     ): void {
         $handlerType = $handler->getType();
         $targetType = $target->getType();
-        if (!$handlerType instanceof ReflectionNamedType || !$targetType instanceof ReflectionNamedType) {
+        if ($handlerType === null || $targetType === null) {
             return;
         }
         if ($targetType->allowsNull() && !$handlerType->allowsNull()) {
@@ -1354,12 +2222,12 @@ final class Injector
             ));
         }
 
-        $expected = $handlerType->getName();
-        $actual = $targetType->getName();
-        if (self::typeAccepts($expected, $actual)) {
+        if (self::reflectionTypeAccepts($handlerType, $targetType)) {
             return;
         }
-        if (($methodCoerce || $handler->getAttributes(Coerce::class) !== []) && self::canCoerce($actual, $expected)) {
+        if (($methodCoerce || $handler->getAttributes(Coerce::class) !== [])
+            && self::reflectionTypeCanCoerce($handlerType, $targetType)
+        ) {
             return;
         }
 
@@ -1367,9 +2235,35 @@ final class Injector
             'Callback parameter $%s in %s expects %s, but target parameter $%s provides %s; add #[Coerce] for a compatible coercion',
             $handler->getName(),
             $handlerName,
-            $expected,
+            (string) $handlerType,
             $target->getName(),
-            $actual,
+            (string) $targetType,
+        ));
+    }
+
+    private static function validateCapturedLocalType(
+        ReflectionParameter $handler,
+        ?string $actualType,
+        string $handlerName,
+        bool $coerce,
+    ): void {
+        $handlerType = $handler->getType();
+        if ($actualType === null || $handlerType === null) {
+            return;
+        }
+        if (self::reflectionTypeAcceptsName($handlerType, $actualType)) {
+            return;
+        }
+        if ($coerce && self::reflectionTypeCanCoerceName($handlerType, $actualType)) {
+            return;
+        }
+
+        throw new CaptureException(sprintf(
+            'Callback local $%s in %s expects %s, but target local provides %s; add #[Coerce] for a compatible coercion',
+            $handler->getName(),
+            $handlerName,
+            (string) $handlerType,
+            $actualType,
         ));
     }
 
@@ -1403,6 +2297,12 @@ final class Injector
         if (in_array($actual, ['int', 'float'], true) && in_array($expected, ['int', 'float'], true)) {
             return true;
         }
+        if ($expected === 'bool' && in_array($actual, ['bool', 'int', 'float', 'string'], true)) {
+            return true;
+        }
+        if ($expected === 'string' && in_array($actual, ['bool', 'int', 'float'], true)) {
+            return true;
+        }
 
         return !in_array($actual, ['array', 'bool', 'callable', 'float', 'int', 'iterable', 'null', 'resource', 'string'], true)
             && !in_array($expected, ['array', 'bool', 'callable', 'float', 'int', 'iterable', 'null', 'resource', 'string'], true);
@@ -1417,6 +2317,21 @@ final class Injector
         }
 
         return new ReflectionFunction($name);
+    }
+
+    private static function targetMethodName(string $name): string
+    {
+        $separator = strrpos($name, '::');
+
+        return $separator === false ? $name : substr($name, $separator + 2);
+    }
+
+    /** @param array<mixed> $context */
+    private static function callbackId(array $context, string $targetName): string
+    {
+        return is_string($context['callbackId'] ?? null)
+            ? $context['callbackId']
+            : self::targetMethodName($targetName);
     }
 
     private static function callbackParameterType(ReflectionParameter $parameter): ?string
@@ -1452,6 +2367,7 @@ final class Injector
      *     callbackCvs: list<int>,
      *     callbackReturnable: bool,
      *     cancellable: bool,
+     *     callbackId: string,
      *     cvMap: array<int, Operand>,
      *     returnOperand: Operand,
      *     preserveReturnOperand: bool,
@@ -1463,6 +2379,7 @@ final class Injector
         $source = $handler->instructions();
         $preserve = [];
         $lowered = self::lowerCallbackRange($target, $source, 0, count($source) - 1, $context, $preserve);
+        $lowered = self::optimizeCallbackConstants($lowered);
 
         return [
             'body' => $handler->withInstructions(self::relocateJumps($lowered, $handler->count())),
@@ -1476,6 +2393,7 @@ final class Injector
      *     callbackCvs: list<int>,
      *     callbackReturnable: bool,
      *     cancellable: bool,
+     *     callbackId: string,
      *     cvMap: array<int, Operand>,
      *     returnOperand: Operand,
      *     preserveReturnOperand: bool,
@@ -1546,14 +2464,15 @@ final class Injector
                 }
                 $lowered = [...$lowered, ...self::withoutLastSend($inner)];
                 $replacement = self::callbackReturnWithValue($target, $value, $instruction->line, $index);
-            } elseif (in_array($method, ['iscancelled', 'iscancellable', 'getid', 'getreturnvalue'], true)) {
+            } elseif (in_array($method, ['iscancelled', 'iscancellable', 'getid', 'getmethodname', 'getreturnvalue'], true)) {
                 if ($method === 'getreturnvalue' && !$context['callbackReturnable']) {
                     throw new InvalidArgumentException('getReturnValue requires CallbackInfoReturnable');
                 }
                 $value = match ($method) {
                     'iscancelled' => Operand::constant(false, 0),
                     'iscancellable' => Operand::constant($context['cancellable'], 0),
-                    'getid' => Operand::constant($target->name, 0),
+                    'getid' => Operand::constant(self::callbackId($context, $target->name), 0),
+                    'getmethodname' => Operand::constant(self::targetMethodName($target->name), 0),
                     default => $context['returnOperand'],
                 };
                 if ($value === $context['returnOperand']) {
@@ -1584,6 +2503,86 @@ final class Injector
         }
 
         return $lowered;
+    }
+
+    /**
+     * Propagate constants produced while virtual callback calls are lowered.
+     *
+     * CallbackInfo getters are deliberately lowered to constant assignments.
+     * Folding only the small, scalar comparison subset here keeps the pass
+     * side-effect-free while avoiding instructions such as `"foo" == "foo"`.
+     *
+     * @param list<Instruction> $instructions
+     * @return list<Instruction>
+     */
+    private static function optimizeCallbackConstants(array $instructions): array
+    {
+        /** @var array<string, Operand> $constants */
+        $constants = [];
+        $optimized = [];
+
+        foreach ($instructions as $instruction) {
+            $canFold = in_array($instruction->name, ['IS_EQUAL', 'IS_NOT_EQUAL', 'IS_IDENTICAL', 'IS_NOT_IDENTICAL'], true);
+            $operand1 = $canFold ? self::callbackConstantOperand($instruction->operand1, $constants) : $instruction->operand1;
+            $operand2 = $canFold ? self::callbackConstantOperand($instruction->operand2, $constants) : $instruction->operand2;
+            $current = $instruction->withOperands($operand1, $operand2);
+
+            $folded = self::foldCallbackComparison($current);
+            if ($folded !== null) {
+                $current = new Instruction(
+                    Zendful::opcodeId('QM_ASSIGN'),
+                    'QM_ASSIGN',
+                    $current->result,
+                    Operand::constant($folded, 0),
+                    Operand::unused(),
+                    $current->extendedValue,
+                    $current->line,
+                    $current->handler,
+                    $current->originalIndex,
+                    $current->invocationTarget,
+                );
+            }
+
+            $resultKey = self::operandKey($current->result);
+            if (!$current->result->isUnused()) {
+                unset($constants[$resultKey]);
+                if ($current->name === 'QM_ASSIGN' && $current->operand1->kind === Operand::CONSTANT && $current->operand2->isUnused()) {
+                    $constants[$resultKey] = $current->operand1;
+                }
+            }
+
+            $optimized[] = $current;
+        }
+
+        return $optimized;
+    }
+
+    /** @param array<string, Operand> $constants */
+    private static function callbackConstantOperand(Operand $operand, array $constants): Operand
+    {
+        return $constants[self::operandKey($operand)] ?? $operand;
+    }
+
+    private static function foldCallbackComparison(Instruction $instruction): ?bool
+    {
+        if (!in_array($instruction->name, ['IS_EQUAL', 'IS_NOT_EQUAL', 'IS_IDENTICAL', 'IS_NOT_IDENTICAL'], true)) {
+            return null;
+        }
+        if ($instruction->operand1->kind !== Operand::CONSTANT || $instruction->operand2->kind !== Operand::CONSTANT) {
+            return null;
+        }
+
+        $leftType = get_debug_type($instruction->operand1->value);
+        $rightType = get_debug_type($instruction->operand2->value);
+        if ($leftType !== $rightType || (!is_scalar($instruction->operand1->value) && $instruction->operand1->value !== null)) {
+            return null;
+        }
+
+        if (in_array($instruction->name, ['IS_EQUAL', 'IS_IDENTICAL'], true)) {
+            return $instruction->operand1->value === $instruction->operand2->value;
+        }
+
+        return $instruction->operand1->value !== $instruction->operand2->value;
     }
 
     /** @param list<int> $callbackCvs */
@@ -1981,6 +2980,7 @@ final class Injector
     {
         if ($match->type === 'new') {
             self::validateConstructorRedirectType($target, $handler, $match);
+            return self::constructorReplacementInputMap($target, $handler, $match);
         }
         if ($match->type === 'field' && $match->fieldMode === 'read') {
             self::validateFieldRedirectTypes($target, $handler, $match);
@@ -2021,6 +3021,9 @@ final class Injector
         }
 
         $instruction = $target->instruction($match->start);
+        if ($match->type === 'constant') {
+            self::validateConstantModifierType($target, $handler, $instruction);
+        }
         if ($match->type === 'invoke') {
             $argument = 0;
             for ($index = $match->start + 1; $index < $match->end; $index++) {
@@ -2111,6 +3114,108 @@ final class Injector
         throw new InvalidArgumentException('A constant modifier target has no literal operand');
     }
 
+    /** @return array<int, Operand> */
+    private static function constructorReplacementInputMap(MethodBody $target, MethodBody $handler, MatchResult $match): array
+    {
+        $receives = [];
+        foreach ($handler->instructions() as $instruction) {
+            if ($instruction->name !== 'RECV') {
+                continue;
+            }
+            if ($instruction->result->kind !== Operand::CV || !is_int($instruction->result->value)) {
+                throw new InvalidArgumentException('A constructor Redirect handler receive has no CV operand');
+            }
+            $receives[] = $instruction->result->value;
+        }
+        if ($receives === []) {
+            return [];
+        }
+
+        $new = $target->instruction($match->start);
+        $class = $new->operand1->kind === Operand::CONSTANT && is_string($new->operand1->value)
+            ? $new->operand1->value
+            : null;
+        if ($class === null || !class_exists($class)) {
+            return [];
+        }
+        $sendIndices = self::directSendIndices($target->instructions(), $match->start + 1, $match->end - 1);
+        $arguments = [];
+        foreach ($target->instructions() as $instruction) {
+            if (str_starts_with($instruction->name, 'SEND')
+                && $instruction->originalIndex !== null
+                && in_array($instruction->originalIndex, $sendIndices, true)
+            ) {
+                $arguments[] = $instruction->operand1;
+            }
+        }
+        if (count($receives) > count($arguments)) {
+            throw new InvalidArgumentException(sprintf(
+                'A constructor Redirect handler expects %d argument(s), but the target constructor provides %d',
+                count($receives),
+                count($arguments),
+            ));
+        }
+
+        $constructor = (new \ReflectionClass($class))->getConstructor();
+        $parameters = $constructor?->getParameters() ?? [];
+        $reflection = self::reflection($handler->name);
+        $methodCoerce = $reflection->getAttributes(Coerce::class) !== [];
+        foreach ($receives as $index => $_receive) {
+            $parameter = $parameters[$index] ?? null;
+            $handlerParameter = $reflection->getParameters()[$index] ?? null;
+            if ($parameter instanceof ReflectionParameter && $handlerParameter instanceof ReflectionParameter) {
+                self::validateCallbackParameterType($handlerParameter, $parameter, $handler->name, $methodCoerce);
+            }
+        }
+
+        $map = [];
+        foreach ($receives as $index => $receive) {
+            $map[$receive] = $arguments[$index];
+        }
+
+        return $map;
+    }
+
+    private static function validateConstantModifierType(MethodBody $target, MethodBody $handler, Instruction $instruction): void
+    {
+        $operand = null;
+        foreach ([$instruction->result, $instruction->operand1, $instruction->operand2] as $candidate) {
+            if ($candidate->kind === Operand::CONSTANT) {
+                $operand = $candidate;
+                break;
+            }
+        }
+        if ($operand === null) {
+            throw new InvalidArgumentException('A constant modifier target has no literal operand');
+        }
+
+        $reflection = self::reflection($handler->name);
+        $parameter = $reflection->getParameters()[0] ?? null;
+        $handlerType = $parameter?->getType();
+        $actualType = Matcher::inferOperandType($target, $operand, $target->count());
+        // Some opcode operand slots are represented as null constants even
+        // though they are not the literal selected by the matcher. They are
+        // intentionally left conservative for wildcard CONSTANT points.
+        if ($handlerType === null || $actualType === null || $actualType === 'null') {
+            return;
+        }
+        if (self::reflectionTypeAcceptsName($handlerType, $actualType)) {
+            return;
+        }
+        $coerce = $reflection->getAttributes(Coerce::class) !== []
+            || $parameter->getAttributes(Coerce::class) !== [];
+        if ($coerce && self::reflectionTypeCanCoerceName($handlerType, $actualType)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'ModifyConstant handler %s expects %s, but the target literal provides %s; add #[Coerce] for a compatible coercion',
+            $handler->name,
+            (string) $handlerType,
+            $actualType,
+        ));
+    }
+
     private static function validateFieldRedirectTypes(MethodBody $target, MethodBody $handler, MatchResult $match): void
     {
         $instruction = $target->instruction($match->start);
@@ -2130,7 +3235,7 @@ final class Injector
             return;
         }
         $propertyType = $property->getType();
-        if (!$propertyType instanceof ReflectionNamedType) {
+        if ($propertyType === null) {
             return;
         }
 
@@ -2138,7 +3243,7 @@ final class Injector
         $coerce = $reflection->getAttributes(Coerce::class) !== [];
         if (in_array($match->fieldMode, ['write', 'array-write'], true)) {
             $parameter = $reflection->getParameters()[0] ?? null;
-            if ($parameter instanceof ReflectionParameter && $parameter->getType() instanceof ReflectionNamedType) {
+            if ($parameter instanceof ReflectionParameter && $parameter->getType() !== null) {
                 self::validateTypesForRedirect(
                     $parameter->getType(),
                     $propertyType,
@@ -2151,7 +3256,7 @@ final class Injector
         }
 
         $return = $reflection->getReturnType();
-        if ($return instanceof ReflectionNamedType && $return->getName() !== 'void') {
+        if ($return !== null && !($return instanceof ReflectionNamedType && $return->getName() === 'void')) {
             self::validateTypesForRedirect($propertyType, $return, $coerce, sprintf('field %s::$%s', $class, $field), $handler->name);
         }
     }
@@ -2178,21 +3283,42 @@ final class Injector
     }
 
     private static function validateTypesForRedirect(
-        ReflectionNamedType $expectedType,
-        ReflectionNamedType $actualType,
+        \ReflectionType $expectedType,
+        \ReflectionType $actualType,
         bool $coerce,
         string $targetDescription,
         string $handlerName,
     ): void {
-        self::validateTypeNamesForRedirect(
-            $expectedType->getName(),
-            $actualType->getName(),
-            $expectedType->allowsNull(),
-            $actualType->allowsNull(),
-            $coerce,
-            $targetDescription,
+        if ($expectedType->allowsNull() && !$actualType->allowsNull()) {
+            throw new InvalidArgumentException(sprintf(
+                'Redirect handler %s cannot accept nullable %s for %s',
+                $handlerName,
+                (string) $actualType,
+                $targetDescription,
+            ));
+        }
+        if (!$expectedType->allowsNull() && $actualType->allowsNull()) {
+            throw new InvalidArgumentException(sprintf(
+                'Redirect handler %s may return null for non-null %s',
+                $handlerName,
+                $targetDescription,
+            ));
+        }
+        if ($actualType->allowsNull()) {
+            return;
+        }
+        if (self::reflectionTypeAccepts($expectedType, $actualType)
+            || ($coerce && self::reflectionTypeCanCoerce($expectedType, $actualType))
+        ) {
+            return;
+        }
+        throw new InvalidArgumentException(sprintf(
+            'Redirect handler %s uses %s for %s, but the target requires %s; add #[Coerce] for a compatible coercion',
             $handlerName,
-        );
+            (string) $actualType,
+            $targetDescription,
+            (string) $expectedType,
+        ));
     }
 
     private static function validateTypeNamesForRedirect(
@@ -2320,7 +3446,7 @@ final class Injector
         bool $methodCoerce,
     ): void {
         $handlerType = $handler->getType();
-        if (!$handlerType instanceof ReflectionNamedType) {
+        if ($handlerType === null) {
             return;
         }
         if ($handlerType->allowsNull()) {
@@ -2331,12 +3457,11 @@ final class Injector
             ));
         }
 
-        $expected = $handlerType->getName();
-        if (self::typeAccepts($expected, $targetType)) {
+        if (self::reflectionTypeAcceptsName($handlerType, $targetType)) {
             return;
         }
         if (($methodCoerce || $handler->getAttributes(Coerce::class) !== [])
-            && self::canCoerce($targetType, $expected)
+            && self::reflectionTypeCanCoerceName($handlerType, $targetType)
         ) {
             return;
         }
@@ -2345,7 +3470,7 @@ final class Injector
             'Redirect receiver $%s in %s expects %s, but the member receiver provides %s; add #[Coerce] for a compatible coercion',
             $handler->getName(),
             $handlerName,
-            $expected,
+            (string) $handlerType,
             $targetType,
         ));
     }
@@ -2380,7 +3505,7 @@ final class Injector
         $targetParameterName = $targetParameter instanceof ReflectionParameter
             ? $targetParameter->getName()
             : (string) $argumentIndex;
-        if (!$handlerType instanceof ReflectionNamedType || !$targetType instanceof ReflectionNamedType) {
+        if ($handlerType === null || $targetType === null) {
             return;
         }
         if (!$targetType->allowsNull() && $handlerType->allowsNull()) {
@@ -2391,14 +3516,12 @@ final class Injector
             ));
         }
 
-        $expected = $targetType->getName();
-        $actual = $handlerType->getName();
-        if (self::typeAccepts($expected, $actual)) {
+        if (self::reflectionTypeAccepts($targetType, $handlerType)) {
             return;
         }
         if (($handlerReflection->getAttributes(Coerce::class) !== []
                 || ($handlerParameter instanceof ReflectionParameter && $handlerParameter->getAttributes(Coerce::class) !== []))
-            && self::canCoerce($actual, $expected)
+            && self::reflectionTypeCanCoerce($targetType, $handlerType)
         ) {
             return;
         }
@@ -2406,9 +3529,9 @@ final class Injector
         throw new InvalidArgumentException(sprintf(
             'ModifyArg handler %s returns %s, but target argument $%s requires %s; add #[Coerce] for a compatible coercion',
             $handler->name,
-            $actual,
+            (string) $handlerType,
             $targetParameterName,
-            $expected,
+            (string) $targetType,
         ));
     }
 
@@ -2427,7 +3550,7 @@ final class Injector
         $handlerReflection = self::reflection($handler->name);
         $handlerType = $handlerReflection->getReturnType();
         $targetType = $reflection->getReturnType();
-        if (!$handlerType instanceof ReflectionNamedType || !$targetType instanceof ReflectionNamedType) {
+        if ($handlerType === null || $targetType === null) {
             return;
         }
         if ($targetType->allowsNull() && !$handlerType->allowsNull()) {
@@ -2438,21 +3561,21 @@ final class Injector
             ));
         }
 
-        $expected = $targetType->getName();
-        $actual = $handlerType->getName();
-        if (self::typeAccepts($expected, $actual)) {
+        if (self::reflectionTypeAccepts($targetType, $handlerType)) {
             return;
         }
-        if ($handlerReflection->getAttributes(Coerce::class) !== [] && self::canCoerce($actual, $expected)) {
+        if ($handlerReflection->getAttributes(Coerce::class) !== []
+            && self::reflectionTypeCanCoerce($targetType, $handlerType)
+        ) {
             return;
         }
 
         throw new InvalidArgumentException(sprintf(
             'Redirect handler %s returns %s, but invocation %s provides %s; add #[Coerce] for a compatible coercion',
             $handler->name,
-            $actual,
+            (string) $handlerType,
             $invocation->name,
-            $expected,
+            (string) $targetType,
         ));
     }
 

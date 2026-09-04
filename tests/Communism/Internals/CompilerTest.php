@@ -116,3 +116,48 @@ it('reads a class from a source file whose class is already loaded', function ()
 
     expect($compiled->class(Compiler::class)?->method('compileFile'))->not->toBeNull();
 });
+
+it('compiles statically resolvable transitive include targets without executing them', function (): void {
+    $directory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'communism-transitive-' . bin2hex(random_bytes(4));
+    if (!mkdir($directory) && !is_dir($directory)) {
+        throw new RuntimeException('Could not create a transitive compiler fixture directory');
+    }
+    $root = $directory . DIRECTORY_SEPARATOR . 'root.php';
+    $child = $directory . DIRECTORY_SEPARATOR . 'child.php';
+
+    try {
+        file_put_contents($child, "<?php\nfinal class CompilerTransitiveChild {}\n");
+        file_put_contents($root, "<?php\nrequire __DIR__ . '/child.php';\nfinal class CompilerTransitiveRoot {}\n");
+
+        $compiled = Compiler::compileFile($root);
+
+        expect($compiled->class('CompilerTransitiveRoot'))->not->toBeNull()
+            ->and($compiled->class('CompilerTransitiveChild'))->not->toBeNull()
+            ->and(class_exists('CompilerTransitiveRoot', false))->toBeFalse()
+            ->and(class_exists('CompilerTransitiveChild', false))->toBeFalse();
+    } finally {
+        if (is_file($root)) {
+            unlink($root);
+        }
+        if (is_file($child)) {
+            unlink($child);
+        }
+        rmdir($directory);
+    }
+});
+
+it('rejects a statically resolvable missing require target', function (): void {
+    $filename = tempnam(sys_get_temp_dir(), 'communism-required-');
+    if ($filename === false) {
+        throw new RuntimeException('Could not create a required compiler fixture');
+    }
+
+    try {
+        file_put_contents($filename, "<?php\nrequire __DIR__ . '/missing-required.php';\n");
+
+        expect(static fn(): mixed => Compiler::compileFile($filename))
+            ->toThrow(InvalidArgumentException::class, 'missing required include');
+    } finally {
+        unlink($filename);
+    }
+});

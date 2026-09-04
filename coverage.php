@@ -31,38 +31,51 @@ if ($extensionDirectory === false) {
     exit(1);
 }
 
-$extensionNames = PHP_OS_FAMILY === 'Windows'
-    ? ['ffi' => ['php_ffi.dll', 'ffi.dll'], 'xml' => ['php_xml.dll', 'xml.dll'], 'dom' => ['php_dom.dll', 'dom.dll'], 'mbstring' => ['php_mbstring.dll', 'mbstring.dll'], 'tokenizer' => ['php_tokenizer.dll', 'tokenizer.dll'], 'opcache' => ['php_opcache.dll', 'opcache.dll'], 'pcov' => ['php_pcov.dll', 'pcov.dll']]
-    : ['ffi' => ['ffi.so'], 'xml' => ['xml.so'], 'dom' => ['dom.so'], 'mbstring' => ['mbstring.so'], 'tokenizer' => ['tokenizer.so'], 'opcache' => ['opcache.so'], 'pcov' => ['pcov.so']];
+$runPhp = static function (array $arguments): array {
+    $process = proc_open(
+        [PHP_BINARY, ...$arguments],
+        [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+        $pipes,
+    );
+    if (!is_resource($process)) {
+        return ['', 1];
+    }
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+
+    return [$stdout === false ? '' : $stdout, proc_close($process)];
+};
+
+$moduleOutput = $runPhp(['-n', '-d', 'extension_dir=' . $extensionDirectory, '-m']);
+$modules = array_filter(array_map('trim', preg_split('/\R/', $moduleOutput[0]) ?: []));
+$hasModule = static fn(string $name): bool => in_array($name, $modules, true);
+
+$smokeExtension = static function (string $name, string $directive, string $directory) use ($runPhp): bool {
+    [, $status] = $runPhp([
+        '-n',
+        '-d',
+        'extension_dir=' . $directory,
+        '-d',
+        $directive . '=' . $name,
+        '-r',
+        'exit(0);',
+    ]);
+
+    return $status === 0;
+};
 
 $extensions = [];
-$zendExtensions = [];
-$extensionDirectories = array_values(array_unique([$extensionDirectory, dirname(PHP_BINARY)]));
-foreach ($extensionNames as $name => $filenames) {
-    foreach ($extensionDirectories as $directory) {
-        foreach ($filenames as $filename) {
-            $path = realpath($directory . DIRECTORY_SEPARATOR . $filename);
-            if ($path !== false) {
-                if ($name === 'opcache') {
-                    $zendExtensions[$name] = $path;
-                } else {
-                    $extensions[$name] = $path;
-                }
-                break 2;
-            }
-        }
-    }
-
-    // Linux distributions may compile OPcache into the CLI binary instead
-    // of shipping an opcache.so file. It is optional for PCOV coverage.
-    if ($name === 'opcache' && !isset($zendExtensions[$name])) {
+foreach (['ffi', 'xml', 'dom', 'mbstring', 'tokenizer', 'pcov'] as $name) {
+    if ($hasModule($name)) {
         continue;
     }
-
-    if (!isset($extensions[$name]) && !isset($zendExtensions[$name])) {
-        fwrite(STDERR, sprintf("The %s PHP extension was not found in %s.\n", $name, $extensionDirectory));
-        exit(1);
+    if ($smokeExtension($name, 'extension', $extensionDirectory)) {
+        $extensions[] = $name;
+        continue;
     }
+    fwrite(STDERR, sprintf("The %s PHP extension is unavailable.\n", $name));
+    exit(1);
 }
 
 $command = [
@@ -72,14 +85,9 @@ $command = [
     'extension_dir=' . $extensionDirectory,
 ];
 
-foreach ($extensions as $path) {
+foreach ($extensions as $name) {
     $command[] = '-d';
-    $command[] = 'extension=' . $path;
-}
-
-foreach ($zendExtensions as $path) {
-    $command[] = '-d';
-    $command[] = 'zend_extension=' . $path;
+    $command[] = 'extension=' . $name;
 }
 
 $command = [

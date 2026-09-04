@@ -33,15 +33,21 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 final class ModifyConstant
 {
-    /** @param At $at */
+    public readonly string $method;
+    /** @var list<non-empty-string> */
+    public readonly array $targets;
+
+    /** @param string|array<mixed> $method */
     public function __construct(
-        public readonly string $method,
+        string|array $method,
         public readonly At $at,
         public readonly mixed $constant = null,
         public readonly ?string $type = null,
         public readonly bool $nullValue = false,
         public readonly ?Slice $slice = null,
     ) {
+        $this->targets = TargetMethods::normalize($method);
+        $this->method = $this->targets[0];
         if ($type !== null && !in_array($type, ['int', 'long', 'float', 'double', 'string', 'null', 'bool', 'array', 'object', 'class'], true)) {
             throw new \InvalidArgumentException('Unsupported constant type discriminator');
         }

@@ -30,6 +30,7 @@ namespace Communism\Internals;
 use Communism\Mixin\Accessor;
 use Communism\Mixin\Applies;
 use Communism\Mixin\At;
+use Communism\Mixin\Coerce;
 use Communism\Mixin\Dynamic;
 use Communism\Mixin\DebugOptions;
 use Communism\Mixin\Final_;
@@ -623,22 +624,24 @@ final class Zend
             $group = self::groupForMethod($method);
             foreach ($method->getAttributes(Inject::class) as $attribute) {
                 $inject = self::attachGroup($attribute->newInstance(), $group);
-                if (!$class->hasMethod($inject->method)) {
-                    throw new InvalidArgumentException(sprintf(
-                        'Class %s has no method %s for injection from %s::%s%s',
-                        $className,
-                        $inject->method,
-                        $traitName,
-                        $method->getName(),
-                        self::dynamicDiagnostic($method),
-                    ));
-                }
+                foreach ($inject->targets as $targetMethod) {
+                    if (!$class->hasMethod($targetMethod)) {
+                        throw new InvalidArgumentException(sprintf(
+                            'Class %s has no method %s for injection from %s::%s%s',
+                            $className,
+                            $targetMethod,
+                            $traitName,
+                            $method->getName(),
+                            self::dynamicDiagnostic($method),
+                        ));
+                    }
 
-                $injectionsByMethod[$inject->method][] = [
-                    'inject' => $inject,
-                    'handler' => $method->getName(),
-                    'surrogate' => $surrogates[$method->getName()] ?? null,
-                ];
+                    $injectionsByMethod[$targetMethod][] = [
+                        'inject' => $inject,
+                        'handler' => $method->getName(),
+                        'surrogate' => $surrogates[$method->getName()] ?? null,
+                    ];
+                }
             }
             foreach ($method->getAttributes(ModifyConstant::class) as $attribute) {
                 $modify = $attribute->newInstance();
@@ -650,23 +653,19 @@ final class Zend
                     ));
                 }
                 $constantTarget = $modify->constant === null && $modify->type !== 'null' && !$modify->nullValue ? '' : $modify->constant;
-                $at = new At($modify->at->value, $constantTarget, $modify->at->ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
-                $inject = self::attachGroup(new Inject($modify->method, $at, true, null, null, null, $modify->slice, null, null, $modify->type, nullValue: $modify->nullValue), $group);
-                if (!$class->hasMethod($inject->method)) {
-                    throw new InvalidArgumentException(sprintf(
-                        'Class %s has no method %s for injection from %s::%s',
-                        $className,
-                        $inject->method,
-                        $traitName,
-                        $method->getName(),
-                    ));
-                }
+                foreach ($modify->targets as $targetMethod) {
+                    $at = new At($modify->at->value, $constantTarget, $modify->at->ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
+                    $inject = self::attachGroup(new Inject($targetMethod, $at, true, null, null, null, $modify->slice, null, null, $modify->type, nullValue: $modify->nullValue), $group);
+                    if (!$class->hasMethod($targetMethod)) {
+                        throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $targetMethod, $traitName, $method->getName()));
+                    }
 
-                $injectionsByMethod[$inject->method][] = [
-                    'inject' => $inject,
-                    'handler' => $method->getName(),
-                    'surrogate' => null,
-                ];
+                    $injectionsByMethod[$targetMethod][] = [
+                        'inject' => $inject,
+                        'handler' => $method->getName(),
+                        'surrogate' => null,
+                    ];
+                }
             }
             foreach ($method->getAttributes(ModifyVariable::class) as $attribute) {
                 $modify = $attribute->newInstance();
@@ -678,50 +677,42 @@ final class Zend
                     ));
                 }
                 if ($modify->print) {
-                    if (!$class->hasMethod($modify->method)) {
-                        throw new InvalidArgumentException(sprintf(
-                            'Class %s has no method %s for ModifyVariable print mode from %s::%s',
+                    foreach ($modify->targets as $targetMethod) {
+                        if (!$class->hasMethod($targetMethod)) {
+                            throw new InvalidArgumentException(sprintf('Class %s has no method %s for ModifyVariable print mode from %s::%s', $className, $targetMethod, $traitName, $method->getName()));
+                        }
+                        self::printModifyVariableLocals(
+                            \Communism\Internals\Needle\Decompiler::decompile($className . '::' . $targetMethod),
                             $className,
-                            $modify->method,
-                            $traitName,
-                            $method->getName(),
-                        ));
+                            $targetMethod,
+                        );
                     }
-                    self::printModifyVariableLocals(
-                        \Communism\Internals\Needle\Decompiler::decompile($className . '::' . $modify->method),
-                        $className,
-                        $modify->method,
-                    );
                     continue;
                 }
                 $ordinal = $modify->ordinal >= 0 ? $modify->ordinal : $modify->at->ordinal;
-                $at = new At($modify->at->value, $modify->name ?? '', $ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
-                $inject = self::attachGroup(new Inject(
-                    $modify->method,
-                    $at,
-                    require: $modify->require,
-                    expect: $modify->expect,
-                    allow: $modify->allow,
-                    variableIndex: $modify->index,
-                    variableType: self::handlerVariableType($method),
-                    variableArgsOnly: $modify->argsOnly,
-                    slice: $modify->slice,
-                ), $group);
-                if (!$class->hasMethod($inject->method)) {
-                    throw new InvalidArgumentException(sprintf(
-                        'Class %s has no method %s for injection from %s::%s',
-                        $className,
-                        $inject->method,
-                        $traitName,
-                        $method->getName(),
-                    ));
-                }
+                foreach ($modify->targets as $targetMethod) {
+                    $at = new At($modify->at->value, $modify->name ?? '', $ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
+                    $inject = self::attachGroup(new Inject(
+                        $targetMethod,
+                        $at,
+                        require: $modify->require,
+                        expect: $modify->expect,
+                        allow: $modify->allow,
+                        variableIndex: $modify->index,
+                        variableType: self::handlerVariableType($method),
+                        variableArgsOnly: $modify->argsOnly,
+                        slice: $modify->slice,
+                    ), $group);
+                    if (!$class->hasMethod($targetMethod)) {
+                        throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $targetMethod, $traitName, $method->getName()));
+                    }
 
-                $injectionsByMethod[$inject->method][] = [
-                    'inject' => $inject,
-                    'handler' => $method->getName(),
-                    'surrogate' => null,
-                ];
+                    $injectionsByMethod[$targetMethod][] = [
+                        'inject' => $inject,
+                        'handler' => $method->getName(),
+                        'surrogate' => null,
+                    ];
+                }
             }
             foreach ($method->getAttributes(ModifyArg::class) as $attribute) {
                 $modify = $attribute->newInstance();
@@ -732,12 +723,14 @@ final class Zend
                         $method->getName(),
                     ));
                 }
-                $at = new At($modify->at->value, $modify->at->target, $modify->at->ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
-                $inject = self::attachGroup(new Inject($modify->method, $at, argumentIndex: $modify->index, slice: $modify->slice), $group);
-                if (!$class->hasMethod($inject->method)) {
-                    throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $inject->method, $traitName, $method->getName()));
+                foreach ($modify->targets as $targetMethod) {
+                    $at = new At($modify->at->value, $modify->at->target, $modify->at->ordinal, $modify->at->shift, $modify->at->by, opcode: $modify->at->opcode);
+                    $inject = self::attachGroup(new Inject($targetMethod, $at, argumentIndex: $modify->index, slice: $modify->slice), $group);
+                    if (!$class->hasMethod($targetMethod)) {
+                        throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $targetMethod, $traitName, $method->getName()));
+                    }
+                    $injectionsByMethod[$targetMethod][] = ['inject' => $inject, 'handler' => $method->getName(), 'surrogate' => null];
                 }
-                $injectionsByMethod[$inject->method][] = ['inject' => $inject, 'handler' => $method->getName(), 'surrogate' => null];
             }
             foreach ($method->getAttributes(ModifyArgs::class) as $attribute) {
                 $modify = $attribute->newInstance();
@@ -748,12 +741,14 @@ final class Zend
                         $method->getName(),
                     ));
                 }
-                $at = new At($modify->at->value, $modify->at->target, $modify->at->ordinal, $modify->at->shift, $modify->at->by, 'replace', $modify->at->opcode);
-                $inject = self::attachGroup(new Inject($modify->method, $at, true, slice: $modify->slice, mode: 'args'), $group);
-                if (!$class->hasMethod($inject->method)) {
-                    throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $inject->method, $traitName, $method->getName()));
+                foreach ($modify->targets as $targetMethod) {
+                    $at = new At($modify->at->value, $modify->at->target, $modify->at->ordinal, $modify->at->shift, $modify->at->by, 'replace', $modify->at->opcode);
+                    $inject = self::attachGroup(new Inject($targetMethod, $at, true, slice: $modify->slice, mode: 'args'), $group);
+                    if (!$class->hasMethod($targetMethod)) {
+                        throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $targetMethod, $traitName, $method->getName()));
+                    }
+                    $injectionsByMethod[$targetMethod][] = ['inject' => $inject, 'handler' => $method->getName(), 'surrogate' => null];
                 }
-                $injectionsByMethod[$inject->method][] = ['inject' => $inject, 'handler' => $method->getName(), 'surrogate' => null];
             }
             foreach ($method->getAttributes(Redirect::class) as $attribute) {
                 $redirect = $attribute->newInstance();
@@ -764,11 +759,13 @@ final class Zend
                         $method->getName(),
                     ));
                 }
-                $inject = self::attachGroup(new Inject($redirect->method, new At($redirect->at->value, $redirect->at->target, $redirect->at->ordinal, $redirect->at->shift, $redirect->at->by, 'replace', $redirect->at->opcode), slice: $redirect->slice), $group);
-                if (!$class->hasMethod($inject->method)) {
-                    throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $inject->method, $traitName, $method->getName()));
+                foreach ($redirect->targets as $targetMethod) {
+                    $inject = self::attachGroup(new Inject($targetMethod, new At($redirect->at->value, $redirect->at->target, $redirect->at->ordinal, $redirect->at->shift, $redirect->at->by, 'replace', $redirect->at->opcode), slice: $redirect->slice), $group);
+                    if (!$class->hasMethod($targetMethod)) {
+                        throw new InvalidArgumentException(sprintf('Class %s has no method %s for injection from %s::%s', $className, $targetMethod, $traitName, $method->getName()));
+                    }
+                    $injectionsByMethod[$targetMethod][] = ['inject' => $inject, 'handler' => $method->getName(), 'surrogate' => null];
                 }
-                $injectionsByMethod[$inject->method][] = ['inject' => $inject, 'handler' => $method->getName(), 'surrogate' => null];
             }
         }
 
@@ -1038,6 +1035,12 @@ final class Zend
         foreach ($declarations[0]->newInstance()->interfaces as $declaration) {
             foreach ((new \ReflectionClass($declaration->interface))->getMethods() as $interfaceMethod) {
                 $sourceName = $declaration->prefix . $interfaceMethod->getName();
+                if (!$mixin->hasMethod($sourceName)
+                    && in_array($declaration->remap, [\Communism\Mixin\InterfaceRemap::ALL, \Communism\Mixin\InterfaceRemap::FORCE], true)
+                    && $mixin->hasMethod($interfaceMethod->getName())
+                ) {
+                    $sourceName = $interfaceMethod->getName();
+                }
                 if (!$mixin->hasMethod($sourceName)) {
                     throw new InvalidArgumentException(sprintf(
                         'Mixin %s is missing %s for interface %s::%s',
@@ -1394,6 +1397,8 @@ final class Zend
             $inject->variableIndex,
             $inject->variableType,
             $inject->nullValue,
+            $inject->variableArgsOnly,
+            $inject->id,
         );
     }
 
@@ -1405,7 +1410,37 @@ final class Zend
         }
         $type = $parameters[0]->getType() ?? null;
 
-        return $type instanceof \ReflectionNamedType && !$type->allowsNull() ? $type->getName() : null;
+        if (!$type instanceof \ReflectionType || $type->allowsNull()) {
+            return null;
+        }
+        $types = [(string) $type];
+        $coerce = $method->getAttributes(Coerce::class) !== []
+            || $parameters[0]->getAttributes(Coerce::class) !== [];
+        if ($coerce) {
+            foreach (explode('|', (string) $type) as $candidate) {
+                $candidate = trim($candidate);
+                if (in_array($candidate, ['int', 'float'], true)) {
+                    $types[] = 'int';
+                    $types[] = 'float';
+                }
+                if ($candidate === 'string') {
+                    $types[] = 'bool';
+                    $types[] = 'int';
+                    $types[] = 'float';
+                }
+                if ($candidate === 'bool') {
+                    $types[] = 'string';
+                    $types[] = 'int';
+                    $types[] = 'float';
+                }
+                if (in_array($candidate, ['array', 'iterable'], true)) {
+                    $types[] = 'array';
+                    $types[] = 'iterable';
+                }
+            }
+        }
+
+        return implode('|', array_values(array_unique($types)));
     }
 
     /**

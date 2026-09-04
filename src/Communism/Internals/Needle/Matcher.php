@@ -847,11 +847,7 @@ final class Matcher
             // assignments are filtered strictly below.
             return true;
         }
-        if ($type === 'object') {
-            return $actual === 'object' || !in_array($actual, ['int', 'float', 'string', 'bool', 'array', 'null'], true);
-        }
-
-        return $actual === $type;
+        return self::matchesVariableTypeName($actual, $type);
     }
 
     private static function matchesVariableTypeAt(MethodBody $body, Operand $operand, string $type, int $before): bool
@@ -860,11 +856,58 @@ final class Matcher
         if ($actual === null || $type === 'mixed') {
             return true;
         }
-        if ($type === 'object') {
-            return $actual === 'object' || !in_array($actual, ['int', 'float', 'string', 'bool', 'array', 'null'], true);
+        return self::matchesVariableTypeName($actual, $type);
+    }
+
+    private static function matchesVariableTypeName(string $actual, string $expected): bool
+    {
+        foreach (explode('|', $actual) as $actualArm) {
+            $matched = false;
+            foreach (explode('|', $expected) as $unionArm) {
+                if (self::matchesVariableTypeArm(trim($actualArm), $unionArm)) {
+                    $matched = true;
+                    break;
+                }
+            }
+            if (!$matched) {
+                return false;
+            }
         }
 
-        return $actual === $type;
+        return true;
+    }
+
+    private static function matchesVariableTypeArm(string $actual, string $unionArm): bool
+    {
+        foreach (explode('&', $unionArm) as $intersectionArm) {
+            $intersectionArm = trim($intersectionArm);
+            $matches = false;
+            foreach (explode('&', $actual) as $actualArm) {
+                if ($intersectionArm === 'object') {
+                    $matches = $actualArm === 'object'
+                        || !in_array($actualArm, ['int', 'float', 'string', 'bool', 'array', 'null'], true);
+                } else {
+                    $matches = $actualArm === $intersectionArm
+                        || ($intersectionArm !== ''
+                            && !in_array($actualArm, ['int', 'float', 'string', 'bool', 'array', 'null'], true)
+                            && is_a($actualArm, $intersectionArm, true));
+                }
+                if ($matches) {
+                    break;
+                }
+            }
+            if (!$matches) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** Return the best conservative type known for an operand before an instruction. */
+    public static function inferOperandType(MethodBody $body, Operand $operand, int $before): ?string
+    {
+        return self::inferredVariableType($body, $operand, $before);
     }
 
     private static function inferredVariableType(MethodBody $body, Operand $operand, int $before): ?string
@@ -881,7 +924,7 @@ final class Matcher
                 default => get_debug_type($operand->value),
             };
         }
-        if (!in_array($operand->kind, [Operand::CV, Operand::TEMPORARY], true)) {
+        if (!in_array($operand->kind, [Operand::CV, Operand::TEMPORARY, Operand::VARIABLE], true)) {
             return null;
         }
 
@@ -931,6 +974,9 @@ final class Matcher
 
     private static function inferredInstructionType(MethodBody $body, Instruction $instruction, int $index): ?string
     {
+        if (in_array($instruction->name, ['DO_FCALL', 'DO_FCALL_BY_NAME', 'DO_UCALL', 'DO_ICALL', 'DO_STATIC_METHOD_CALL', 'DO_METHOD_CALL'], true)) {
+            return self::inferredInvocationReturnType($body, $index);
+        }
         if ($instruction->name === 'ASSIGN') {
             return self::inferredVariableType($body, $instruction->operand2, $index);
         }
@@ -959,6 +1005,61 @@ final class Matcher
         }
         if (in_array($instruction->name, ['BOOL', 'BOOL_NOT', 'IS_EQUAL', 'IS_NOT_EQUAL', 'IS_IDENTICAL', 'IS_NOT_IDENTICAL', 'IS_SMALLER', 'IS_SMALLER_OR_EQUAL', 'TYPE_CHECK'], true)) {
             return 'bool';
+        }
+
+        return null;
+    }
+
+    private static function inferredInvocationReturnType(MethodBody $body, int $end): ?string
+    {
+        for ($index = $end - 1; $index >= 0; $index--) {
+            $init = $body->instruction($index);
+            if (!self::isInvocationStart($init->name)) {
+                continue;
+            }
+            try {
+                if (in_array($init->name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME', 'INIT_NS_FCALL_BY_NAME'], true)
+                    && (($init->operand2->kind === Operand::CONSTANT && is_string($init->operand2->value))
+                        || ($init->operand1->kind === Operand::CONSTANT && is_string($init->operand1->value)))
+                ) {
+                    $name = null;
+                    if ($init->operand2->kind === Operand::CONSTANT && is_string($init->operand2->value)) {
+                        $name = $init->operand2->value;
+                    } elseif ($init->operand1->kind === Operand::CONSTANT && is_string($init->operand1->value)) {
+                        $name = $init->operand1->value;
+                    }
+                    if ($name === null) {
+                        return null;
+                    }
+                    $type = (new ReflectionFunction($name))->getReturnType();
+
+                    return $type instanceof \ReflectionNamedType ? $type->getName() : null;
+                }
+                if ($init->name === 'INIT_STATIC_METHOD_CALL'
+                    && $init->operand1->kind === Operand::CONSTANT
+                    && is_string($init->operand1->value)
+                    && $init->operand2->kind === Operand::CONSTANT
+                    && is_string($init->operand2->value)
+                ) {
+                    $type = (new ReflectionMethod($init->operand1->value, $init->operand2->value))->getReturnType();
+
+                    return $type instanceof \ReflectionNamedType ? $type->getName() : null;
+                }
+                if ($init->name === 'INIT_METHOD_CALL'
+                    && $init->operand2->kind === Operand::CONSTANT
+                    && is_string($init->operand2->value)
+                    && str_contains($body->name, '::')
+                ) {
+                    [$class] = explode('::', $body->name, 2);
+                    $type = (new ReflectionMethod($class, $init->operand2->value))->getReturnType();
+
+                    return $type instanceof \ReflectionNamedType ? $type->getName() : null;
+                }
+            } catch (\ReflectionException) {
+                return null;
+            }
+
+            return null;
         }
 
         return null;

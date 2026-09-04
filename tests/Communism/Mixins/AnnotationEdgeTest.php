@@ -8,6 +8,13 @@ use Communism\Mixin\Inject;
 use Communism\Mixin\Mixin;
 use Communism\Mixin\MixinConfiguration;
 use Communism\Mixin\ModifyVariable;
+use Communism\Mixin\Applies;
+use Communism\Mixin\DebugOptions;
+use Communism\Mixin\Dynamic;
+use Communism\Mixin\Implements_;
+use Communism\Mixin\Interface_;
+use Communism\Mixin\Intrinsic;
+use Communism\Mixin\Overwrite;
 
 it('validates At descriptions and action defaults', function (): void {
     expect((new At('HEAD'))->action())->toBe('before')
@@ -79,3 +86,63 @@ it('orders declarative configurations deterministically and filters their contex
 final class AnnotationEdgeTestTarget {}
 
 final class AnnotationEdgeOtherTarget {}
+
+describe('Applies', function (): void {
+    covers(Applies::class);
+
+    it('matches exact, regex, and glob selectors', function (): void {
+        expect((new Applies('ExampleTarget'))->matches('exampletarget'))->toBeTrue()
+            ->and((new Applies('REGEX', '^Example'))->matches('ExampleTarget'))->toBeTrue()
+            ->and((new Applies('GLOB', 'Example*'))->matches('ExampleTarget'))->toBeTrue()
+            ->and((new Applies('ExampleTarget'))->matches('OtherTarget'))->toBeFalse();
+    });
+});
+
+describe('DebugOptions', function (): void {
+    covers(DebugOptions::class);
+
+    it('stores default and explicit debugging options', function (): void {
+        expect((new DebugOptions())->export)->toBeTrue()
+            ->and((new DebugOptions(false, true, false, false))->verbose)->toBeTrue();
+    });
+});
+
+describe('Dynamic', function (): void {
+    covers(Dynamic::class);
+
+    it('describes a dynamic value or supplying mixin', function (): void {
+        expect((new Dynamic('description'))->description())->toBe('description')
+            ->and((new Dynamic(mixin: AnnotationEdgeTestTarget::class))->description())
+            ->toBe(AnnotationEdgeTestTarget::class)
+            ->and(static fn() => new Dynamic())->toThrow(InvalidArgumentException::class);
+    });
+});
+
+describe('Implements_', function (): void {
+    covers(Implements_::class);
+
+    it('requires and stores interface declarations', function (): void {
+        $interface = new Interface_(ComposedContract::class, 'contract_');
+
+        expect((new Implements_($interface))->interfaces)->toBe([$interface])
+            ->and(static fn() => new Implements_())->toThrow(InvalidArgumentException::class);
+    });
+});
+
+describe('Intrinsic', function (): void {
+    covers(Intrinsic::class);
+
+    it('stores the displacement policy', function (): void {
+        expect((new Intrinsic())->displace)->toBeFalse()
+            ->and((new Intrinsic(true))->displace)->toBeTrue();
+    });
+});
+
+describe('Overwrite', function (): void {
+    covers(Overwrite::class);
+
+    it('stores target aliases and rejects empty aliases', function (): void {
+        expect((new Overwrite('run', ['alternate']))->aliases)->toBe(['alternate'])
+            ->and(static fn() => new Overwrite(aliases: ['']))->toThrow(InvalidArgumentException::class);
+    });
+});

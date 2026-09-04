@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Communism\Internals\Needle\Injector;
+use Communism\Internals\Needle\CaptureException;
 use Communism\Internals\Needle\Instruction;
 use Communism\Internals\Needle\MatchResult;
 use Communism\Internals\Needle\Matcher;
@@ -306,9 +307,9 @@ it('validates callback parameter compatibility and coercion rules', function ():
         ->and($method->invoke(null, $attribute, $integer, 'attribute', false))->toBeNull()
         ->and($method->invoke(null, (new ReflectionFunction('array_key_exists'))->getParameters()[0], $integer, 'union-type', false))->toBeNull()
         ->and(static fn() => $method->invoke(null, $integer, $nullable, 'nullable', false))
-        ->toThrow(\Communism\Internals\Needle\CaptureException::class)
+        ->toThrow(CaptureException::class)
         ->and(static fn() => $method->invoke(null, $float, $integer, 'incompatible', false))
-        ->toThrow(\Communism\Internals\Needle\CaptureException::class);
+        ->toThrow(CaptureException::class);
 });
 
 it('covers callback local mapping edge cases', function (): void {
@@ -349,7 +350,7 @@ it('covers callback local mapping edge cases', function (): void {
         [0 => 'value'],
     );
     expect(static fn() => $call('callbackContext', $targetWithMismatchedName, new MethodBody('injectorHelperCallbackWithLocal', null, 0, 0, $handlerInstructions), new Inject('injectorOtherNamedParameter', new At('HEAD'), locals: LocalCapture::NO_CAPTURE), new MatchResult(0, 0, 'head')))
-        ->toThrow(\Communism\Internals\Needle\CaptureException::class);
+        ->toThrow(CaptureException::class);
 
     $targetWithSyntheticReceive = new MethodBody(
         'injectorHelperObject',
@@ -486,7 +487,7 @@ it('covers grouped placements and surrogate capture failures', function (): void
         [$captureInject],
         static fn() => $captureHandler,
         static fn() => $captureHandler,
-    ))->toThrow(\Communism\Internals\Needle\CaptureException::class);
+    ))->toThrow(CaptureException::class);
 });
 
 it('validates invocation reflection and modifier return types', function (): void {

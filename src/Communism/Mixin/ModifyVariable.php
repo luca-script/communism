@@ -33,9 +33,13 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 final class ModifyVariable
 {
-    /** @param At $at */
+    public readonly string $method;
+    /** @var list<non-empty-string> */
+    public readonly array $targets;
+
+    /** @param string|array<mixed> $method */
     public function __construct(
-        public readonly string $method,
+        string|array $method,
         public readonly At $at,
         public readonly ?string $name = null,
         public readonly int $ordinal = -1,
@@ -47,6 +51,8 @@ final class ModifyVariable
         public readonly bool $print = false,
         public readonly ?Slice $slice = null,
     ) {
+        $this->targets = TargetMethods::normalize($method);
+        $this->method = $this->targets[0];
         if ($index !== null && $index < 0) {
             throw new \InvalidArgumentException('ModifyVariable index must be non-negative');
         }

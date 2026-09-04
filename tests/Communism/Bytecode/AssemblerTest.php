@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Communism\Internals\Needle\Assembler;
 use Communism\Internals\Needle\Decompiler;
+use Communism\Internals\Needle\Instruction;
+use Communism\Internals\Needle\MethodBody;
 use Communism\Internals\Needle\Operand;
 use Communism\Internals\Needle\Verifier;
 use Zendful\Zendful;
@@ -166,7 +168,7 @@ it('independently verifies instruction metadata before assembly', function (): v
         $instruction->withOpcode($instruction->opcode, "RETURN\0"),
     )))->toThrow(RuntimeException::class, 'invalid opcode metadata');
 
-    $negativeOriginalIndex = new \Communism\Internals\Needle\Instruction(
+    $negativeOriginalIndex = new Instruction(
         $instruction->opcode,
         $instruction->name,
         $instruction->result,
@@ -182,13 +184,23 @@ it('independently verifies instruction metadata before assembly', function (): v
         ->toThrow(RuntimeException::class, 'negative original index');
 });
 
+describe('Verifier', function (): void {
+    covers(Verifier::class);
+
+    it('rejects invalid detached method allocation metadata', function (): void {
+
+    expect(static fn() => Verifier::verify(new MethodBody('invalid', null, 1, 1, [], [], -1)))
+        ->toThrow(RuntimeException::class, 'negative allocation');
+    });
+});
+
 it('deduplicates literals and emits static-call name pairs', function (): void {
     $plan = new ReflectionMethod(Assembler::class, 'planLiterals');
     $plan->setAccessible(true);
     $shared = Operand::constant('Shared', 0);
-    $body = new \Communism\Internals\Needle\MethodBody('literalPlan', null, 0, 0, [
-        new \Communism\Internals\Needle\Instruction(0, 'INIT_STATIC_METHOD_CALL', Operand::unused(), $shared, Operand::constant('Method', 0)),
-        new \Communism\Internals\Needle\Instruction(0, 'RETURN', $shared, $shared, Operand::unused()),
+    $body = new MethodBody('literalPlan', null, 0, 0, [
+        new Instruction(0, 'INIT_STATIC_METHOD_CALL', Operand::unused(), $shared, Operand::constant('Method', 0)),
+        new Instruction(0, 'RETURN', $shared, $shared, Operand::unused()),
     ]);
 
     $result = $plan->invoke(null, $body, 0);

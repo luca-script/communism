@@ -22,6 +22,8 @@ exists upstream.
       throw points supported by the current bytecode model.
     - `[x]` callback ordering before and after invocation points.
     - `[x]` `require`, `expect`, and `allow` match-count guarantees.
+    - `[x]` multiple target methods on one callback declaration, using a
+      PHP-native list of method names.
     - `[x]` explicit `Group` declarations with minimum/maximum aggregate counts.
     - `[x]` `Slice` ranges limiting the search region with reversed/missing-bound
       validation.
@@ -36,16 +38,21 @@ exists upstream.
 - `[~]` virtual `CallbackInfo` and `CallbackInfoReturnable`.
     - `[x]` cancellation and return-value replacement.
     - `[x]` callback id, cancellability, cancellation state, and return value.
+    - `[x]` virtual `getMethodName()` exposing the selected PHP target method.
     - `[x]` virtual callback escape rejection before target mutation.
     - `[~]` local capture by target name and positional parameter; surrogate
       fallback handlers are supported, while full stack / local-frame capture
       modes remain to be implemented.
+    - `[x]` explicit `Local(name: ...)` and `Parameter(name: ...)/Parameter(ordinal: ...)`
+      bindings for resolving handler-parameter name conflicts.
+    - `[x]` positional capture of initialized named CV locals after target
+      parameters; full stack / local-frame capture modes remain unsupported.
     - `[~]` callback exception and cancellation diagnostics; fail-hard callback
       preparation failures expose structured point, method, instruction-span,
       and chained-cause data, while runtime callback event export remains.
 - `[x]` `ModifyArg`: replace one argument of a matched invocation.
-    - `[x]` argument and handler-return type validation, with compatible numeric
-      coercion under `#[Coerce]`.
+    - `[x]` argument and handler-return type validation, including PHP union
+      signatures, with compatible numeric coercion under `#[Coerce]`.
     - `[x]` `Slice` ranges are shared with the generic `Inject` resolver.
 - `[~]` `ModifyArgs`: expose and rewrite all invocation arguments through a
   virtual `Args` type.
@@ -55,9 +62,13 @@ exists upstream.
     - `[x]` replacements reject non-constant or out-of-range argument indexes.
     - `[x]` statically known `setAll` lowering without constructing an array.
     - `[~]` statically known `setAll` locals and array constructions are
-      lowered, including variable element expressions in source order; opaque
-      runtime-built arrays, coercion, and immutable/primitive argument rules
-      remain.
+      lowered, including variable element expressions in source order and
+      zero-argument functions or static methods returning literal lists; opaque
+      or argument-dependent runtime-built arrays remain. Known primitive replacements are validated
+      against the reflected invocation types before mutation, including
+      union-typed parameters, and opted-in known numeric and iterable-to-array
+      replacements (including typed expression operands) are coerced with
+      explicit bytecode casts; unknown runtime operands remain conservative.
     - `[x]` `Slice` ranges are supported for `ModifyArgs` declarations.
 - `[~]` `ModifyConstant`: replace a matching literal.
     - `[x]` exact literal and wildcard literal replacement.
@@ -74,25 +85,38 @@ exists upstream.
     - `[x]` diagnostic `print` mode for inspecting locals without mutation.
     - `[x]` `Slice` ranges are supported for local matching.
 - `[~]` local selection supports declaration-order CV indexes and handler-type
-  filtering for known declared/literal types. Simple preceding assignments,
+  filtering for known declared/literal types, including PHP union/intersection
+  handler types; decompiled target parameter metadata preserves those PHP type
+  expressions for matching and replacement coercion. Simple preceding assignments,
   arithmetic temporaries, and concatenation temporaries are propagated for
   load matching; implicit handler-type discrimination and conservative
   whole-body inference across consistent control-flow assignments are covered.
+  Callback locals are also rejected when their CV exists but is not initialized
+  at the injection point, including correct post-assignment handling; known
+  captured-local callback types are validated and support `#[Coerce]` casts.
 - `[~]` `Redirect`: redirect a matched invocation.
     - `[x]` global function replacement.
     - `[x]` static/member invocation replacement with matched argument and
       receiver mapping, including computed handler return values.
     - `[x]` field read/write redirection.
-    - `[x]` constructor redirection through `NEW` (allocation plus constructor call).
+    - `[x]` constructor redirection through `NEW` (allocation plus constructor call),
+      including direct constructor-argument mapping and signature validation.
     - `[x]` array read/write redirection through the Mixin-shaped `FIELD` point
       with target `[]`.
     - `[x]` `Slice` ranges are supported for redirects.
 - `[~]` `Coerce` parameter behavior for compatible but non-identical callback
   argument types; primitive numeric and reference compatibility checks,
-  Redirect argument coercion, method-level Redirect return coercion, and
-  field/constructor replacement validation are implemented. Iterable-to-array
-  coercion and numeric explicit cast emission are implemented; other
-  array-shape coercions and cast contexts remain.
+  union/intersection-aware callback and member-receiver validation/casts,
+  Redirect argument coercion,
+  method-level Redirect return coercion, and
+  union/intersection-aware field and constructor replacement validation are
+  implemented. Iterable-to-array
+  coercion and numeric explicit cast emission are implemented, including
+  parameter-level callback coercion, scalar string/boolean casts,
+  `ModifyConstant`/`ModifyVariable` input coercion, field Redirect input coercion, and typed
+  `ModifyConstant`/`ModifyVariable` replacement results;
+  other array-shape coercions and cast
+  contexts remain.
 
 ## Injection-point language
 
@@ -100,9 +124,10 @@ exists upstream.
     - `[x]` global, static, and member invocation forms.
     - `[x]` exact argument counts and bounded argument-count ranges.
     - `[x]` wildcard matching for global, static, and member method names.
-    - `[x]` reflected PHP signatures, PHP-native selector quantifiers, and
-      explicit `['aliases' => [...]]` remapping; signatures use named PHP types
-      rather than JVM descriptors.
+    - `[x]` reflected PHP signatures, including named, union, nullable, and
+      intersection types, PHP-native selector quantifiers, and explicit
+      `['aliases' => [...]]` remapping; signatures use PHP types rather than
+      JVM descriptors.
 - `[~]` built-in `At` values.
     - `[x]` `HEAD`, `TAIL`, `RETURN`, `INVOKE`, `FIELD`, `CONSTANT`, `STORE`,
       and `THROW`.
@@ -166,6 +191,8 @@ exists upstream.
   (`Implements_` / `Interface_`).
     - `[x]` interface contract validation and prefixed default-method composition
       under PHP method names.
+    - `[x]` PHP-native `InterfaceRemap` modes, including `ALL` fallback to an
+      unprefixed method and strict `ONLY_PREFIXED` behavior.
     - `[x]` registering the interface in an already-declared PHP class through
       the Zend class-entry interface list.
 - `[x]` `Final_` and `Mutable` field/method mutability controls, including
@@ -173,8 +200,8 @@ exists upstream.
 - `[~]` compatible receiver/interface coercion declarations.
     - `[x]` typed Redirect member receivers are validated against declared class
       and interface receiver types before bytecode mutation.
-    - `[ ]` explicit receiver coercion declarations for unknown/dynamic receiver
-      operands remain.
+    - `[x]` parameter-level or method-level `Coerce` explicitly authorizes
+      otherwise unknown/dynamic Redirect receiver operands.
 - `[~]` dynamic/obfuscated member declarations and descriptor aliases
   (`Dynamic`, `Desc`).
     - `[x]` metadata-only `Dynamic` declarations on methods/properties, with
@@ -196,7 +223,9 @@ exists upstream.
       detached class/method/function bytecode snapshots without executing files.
 - [x] PHPStan bytecode target validation, including inherited methods resolved
       through their declaring class and actual injection-point matching.
-- [ ] compile-time resolution of transitive include / require targets.
+- `[x]` compile-time resolution of statically resolvable transitive include /
+      require targets, including `__DIR__` concatenations, cycle detection,
+      detached declaration merging, and missing-required-target diagnostics.
 
 - `[x]` declarative mixin configurations with target lists, priority, required
   flag, compatibility version, and environment side through

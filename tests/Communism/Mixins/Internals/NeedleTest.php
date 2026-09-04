@@ -18,6 +18,7 @@ use Communism\Mixin\Inject;
 use Communism\Mixin\InjectionConflictException;
 use Communism\Mixin\InjectionException;
 use Communism\Mixin\ReferenceMap;
+use Communism\Mixin\Slice;
 use Zendful\Internals\Natives;
 use Zendful\Zendful;
 
@@ -25,6 +26,28 @@ function needleCoverageFunction(string $value): string
 {
     return $value . '!';
 }
+
+describe('ReferenceMap', function (): void {
+    covers(ReferenceMap::class);
+
+    it('remaps reference-map selectors and aliases', function (): void {
+
+    $map = new ReferenceMap(methods: ['logical' => 'mapped', 'alias' => 'renamed'], fields: ['field' => 'property']);
+
+    expect($map->method('missing'))->toBe('missing')
+        ->and($map->field('missing'))->toBe('missing')
+        ->and($map->invocation('logical'))->toBe('mapped')
+        ->and($map->invocation(new Desc('logical')))->toBe(['mapped', ['signature' => ['parameters' => [], 'return' => 'void']]])
+        ->and($map->invocation(['logical', ['aliases' => ['alias', 42]]]))->toBe(['mapped', ['aliases' => ['renamed', 42]]])
+        ->and($map->invocation(['logical', ['aliases' => 'not-a-list']]))->toBe(['mapped', ['aliases' => 'not-a-list']])
+        ->and($map->invocation([42]))->toBe([42])
+        ->and($map->fieldTarget('field'))->toBe('property')
+        ->and($map->fieldTarget(['field', ['aliases' => ['field', 42]]]))->toBe(['property', ['aliases' => ['property', 42]]])
+        ->and($map->fieldTarget([42]))->toBe([42]);
+
+    expect(static fn() => new ReferenceMap(methods: ['bad name' => 'ok']))->toThrow(InvalidArgumentException::class);
+    });
+});
 
 final class DecompilerCallableCoverageTarget
 {
@@ -531,7 +554,7 @@ it('selects injection points by ordinal', function (): void {
 
 it('restricts injection resolution to a Mixin-style slice', function (): void {
     $body = Decompiler::decompile(NeedleFixture::class . '::invokeTwice');
-    $slice = new \Communism\Mixin\Slice(
+    $slice = new Slice(
         new At('INVOKE', 'strtoupper', 0),
         new At('INVOKE', 'strtoupper', 1),
     );
@@ -564,7 +587,7 @@ it('validates slices, groups, and safe shift distances before rewriting', functi
         $body,
         new At('INVOKE', 'strtoupper'),
         null,
-        new \Communism\Mixin\Slice(new At('INVOKE', 'strtoupper', 1), new At('INVOKE', 'strtoupper', 0)),
+        new Slice(new At('INVOKE', 'strtoupper', 1), new At('INVOKE', 'strtoupper', 0)),
     ))->toThrow(InvalidArgumentException::class, 'reversed');
 
     expect(fn(): Group => new Group('invalid', 2, 1))

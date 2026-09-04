@@ -30,7 +30,6 @@ namespace Communism\Internals\Needle;
 use Communism\Mixin\Desc;
 use InvalidArgumentException;
 use ReflectionFunctionAbstract;
-use ReflectionNamedType;
 
 use function ctype_digit;
 use function is_array;
@@ -151,17 +150,43 @@ final readonly class InvocationSpec
             if (!is_string($parameter)) {
                 throw new InvalidArgumentException('Invocation SIGNATURE contains an invalid parameter type');
             }
-            if ($parameter !== '*' && preg_match('/^\??[A-Za-z_][A-Za-z0-9_\\\\\/]*$/', $parameter) !== 1) {
+            if ($parameter !== '*' && !self::validSignatureType($parameter)) {
                 throw new InvalidArgumentException('Invocation SIGNATURE contains an invalid parameter type');
             }
             $parameters[] = $parameter;
         }
         $return = $signature['return'];
-        if ($return !== '*' && preg_match('/^\??[A-Za-z_][A-Za-z0-9_\\\\\/]*$/', $return) !== 1) {
+        if ($return !== '*' && !self::validSignatureType($return)) {
             throw new InvalidArgumentException('Invocation SIGNATURE contains an invalid return type');
         }
 
         return ['parameters' => $parameters, 'return' => $return];
+    }
+
+    private static function validSignatureType(string $type): bool
+    {
+        if ($type === '') {
+            return false;
+        }
+        if (str_starts_with($type, '?')) {
+            if (str_contains($type, '|') || str_contains($type, '&')) {
+                return false;
+            }
+            $type = substr($type, 1);
+        }
+
+        $parts = preg_split('/[|&]/', $type);
+        if ($parts === false || $parts === []) {
+            return false;
+        }
+
+        foreach ($parts as $part) {
+            if (preg_match('/^[A-Za-z_][A-Za-z0-9_\\\\\/]*$/', $part) !== 1) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -299,16 +324,39 @@ final readonly class InvocationSpec
             return false;
         }
         foreach ($expectedParameters as $index => $expected) {
-            $type = $parameters[$index]->getType();
-            $expected = str_replace('/', '\\', $expected);
-            if (!$type instanceof ReflectionNamedType || ($expected !== '*' && ltrim($expected, '?') !== $type->getName())) {
+            if (!self::signatureTypeMatches($expected, $parameters[$index]->getType())) {
                 return false;
             }
         }
         $return = $reflection->getReturnType();
 
-        return $return instanceof ReflectionNamedType
-            && ($this->signature['return'] === '*' || str_replace('/', '\\', ltrim($this->signature['return'], '?')) === $return->getName());
+        return self::signatureTypeMatches($this->signature['return'], $return);
+    }
+
+    private static function signatureTypeMatches(string $expected, ?\ReflectionType $actual): bool
+    {
+        if ($expected === '*') {
+            return true;
+        }
+        if ($actual === null) {
+            return false;
+        }
+
+        return self::normalizeSignatureType($expected) === self::normalizeSignatureType((string) $actual);
+    }
+
+    private static function normalizeSignatureType(string $type): string
+    {
+        $nullable = str_starts_with($type, '?');
+        $type = str_replace('/', '\\', $nullable ? substr($type, 1) : $type);
+        $delimiter = str_contains($type, '&') ? '&' : '|';
+        $parts = explode($delimiter, $type);
+        if ($nullable) {
+            $parts[] = 'null';
+        }
+        sort($parts);
+
+        return implode($delimiter, $parts);
     }
 
     public static function matchesName(string $value, string $pattern): bool

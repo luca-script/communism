@@ -32,7 +32,6 @@ use ReflectionException;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
-use ReflectionNamedType;
 use RuntimeException;
 use Zendful\CompiledOpArrayHandle;
 use Zendful\FunctionHandle;
@@ -64,10 +63,10 @@ final class Decompiler
         $variableTypes = [];
         foreach ($reflection->getParameters() as $parameter) {
             $type = $parameter->getType();
-            if ($type instanceof ReflectionNamedType) {
+            if ($type !== null) {
                 foreach ($source->opArray()->variableNames() as $index => $name) {
                     if ($name === $parameter->getName()) {
-                        $variableTypes[$index] = $type->getName();
+                        $variableTypes[$index] = (string) $type;
                         break;
                     }
                 }

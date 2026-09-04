@@ -36,6 +36,29 @@ final class ManifestRuntimeDefinition extends Manifest
     }
 }
 
+final class ManifestDefaultsDefinition extends Manifest
+{
+    public function getTransforms(): array
+    {
+        return [];
+    }
+}
+
+describe('Manifest', function (): void {
+    covers(Manifest::class);
+
+    it('provides the default manifest policy values', function (): void {
+
+    $manifest = new ManifestDefaultsDefinition();
+
+    expect(ManifestDefaultsDefinition::isSingle())->toBeTrue()
+        ->and($manifest->getPriority())->toBe(1000)
+        ->and($manifest->getEnvironment())->toBeNull()
+        ->and($manifest->isRequired())->toBeTrue()
+        ->and($manifest->shouldTransform('Target', 'Mixin'))->toBeTrue();
+    });
+});
+
 it('installs a class manifest and applies its declared transforms', function (): void {
     $runtime = Runtime::installOrGet();
     $runtime->add(ManifestRuntimeDefinition::class);
