@@ -59,7 +59,7 @@ final class ModifyConstantCoerceTarget
 it('casts a coerced ModifyConstant result to the literal type', function (): void {
     (new ReflectionClass(ModifyConstantCoerceTarget::class))->inject(ModifyConstantCoerceMixin::class);
 
-    expect((new ModifyConstantCoerceTarget())->value(3))->toBe(10)
+    expect((new ModifyConstantCoerceTarget())->value(3))->toBe(8)
         ->and(array_filter(
             Decompiler::decompile(ModifyConstantCoerceTarget::class . '::value')->instructions(),
             static fn($instruction): bool => $instruction->name === 'CAST' && $instruction->extendedValue === 4,

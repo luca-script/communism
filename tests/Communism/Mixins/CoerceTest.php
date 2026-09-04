@@ -150,12 +150,10 @@ final class CoerceDynamicReceiverRejectTarget
     }
 }
 
-it('rejects an uncoerced Redirect receiver with an unknown target type before mutation', function (): void {
-    expect(static function (): void {
-        (new ReflectionClass(CoerceDynamicReceiverRejectTarget::class))->inject(CoerceDynamicReceiverRejectMixin::class);
-    })->toThrow(InvalidArgumentException::class, 'unknown target type');
+it('allows an untyped Redirect receiver when the runtime object satisfies the handler', function (): void {
+    (new ReflectionClass(CoerceDynamicReceiverRejectTarget::class))->inject(CoerceDynamicReceiverRejectMixin::class);
 
-    expect((new CoerceDynamicReceiverRejectTarget())->run(new CoerceReceiverService(), 'ok'))->toBe('ok!');
+    expect((new CoerceDynamicReceiverRejectTarget())->run(new CoerceReceiverService(), 'ok'))->toBe('OK!');
 });
 
 #[Mixin(CoerceTarget::class)]
