@@ -88,7 +88,7 @@ final class AnnotationEdgeTestTarget {}
 final class AnnotationEdgeOtherTarget {}
 
 describe('Applies', function (): void {
-    covers(Applies::class);
+    covers([Applies::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('matches exact, regex, and glob selectors', function (): void {
         expect((new Applies('ExampleTarget'))->matches('exampletarget'))->toBeTrue()
@@ -99,7 +99,7 @@ describe('Applies', function (): void {
 });
 
 describe('DebugOptions', function (): void {
-    covers(DebugOptions::class);
+    covers([DebugOptions::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('stores default and explicit debugging options', function (): void {
         expect((new DebugOptions())->export)->toBeTrue()
@@ -108,7 +108,7 @@ describe('DebugOptions', function (): void {
 });
 
 describe('Dynamic', function (): void {
-    covers(Dynamic::class);
+    covers([Dynamic::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('describes a dynamic value or supplying mixin', function (): void {
         expect((new Dynamic('description'))->description())->toBe('description')
@@ -119,7 +119,7 @@ describe('Dynamic', function (): void {
 });
 
 describe('Implements_', function (): void {
-    covers(Implements_::class);
+    covers([Implements_::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('requires and stores interface declarations', function (): void {
         $interface = new Interface_(ComposedContract::class, 'contract_');
@@ -130,7 +130,7 @@ describe('Implements_', function (): void {
 });
 
 describe('Intrinsic', function (): void {
-    covers(Intrinsic::class);
+    covers([Intrinsic::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('stores the displacement policy', function (): void {
         expect((new Intrinsic())->displace)->toBeFalse()
@@ -139,7 +139,7 @@ describe('Intrinsic', function (): void {
 });
 
 describe('Overwrite', function (): void {
-    covers(Overwrite::class);
+    covers([Overwrite::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('stores target aliases and rejects empty aliases', function (): void {
         expect((new Overwrite('run', ['alternate']))->aliases)->toBe(['alternate'])

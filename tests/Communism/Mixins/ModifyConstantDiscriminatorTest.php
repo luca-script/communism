@@ -7,139 +7,143 @@ use Communism\Mixin\Mixin;
 use Communism\Mixin\ModifyConstant;
 use Communism\Reflect\ReflectionClass;
 
-#[Mixin(ModifyConstantLongTarget::class)]
-final class ModifyConstantLongMixin
-{
-    private function __construct() {}
-    #[ModifyConstant('value', new At('CONSTANT'), type: 'long')]
-    public function replaceLong(int $value): int
+describe('ModifyConstant', function (): void {
+    covers([ModifyConstant::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+
+    #[Mixin(ModifyConstantLongTarget::class)]
+    final class ModifyConstantLongMixin
     {
-        return $value + 10;
+        private function __construct() {}
+        #[ModifyConstant('value', new At('CONSTANT'), type: 'long')]
+        public function replaceLong(int $value): int
+        {
+            return $value + 10;
+        }
     }
-}
 
 
-final class ModifyConstantLongTarget
-{
-    public function value(int $value): int
+    final class ModifyConstantLongTarget
     {
-        return $value + 2;
+        public function value(int $value): int
+        {
+            return $value + 2;
+        }
     }
-}
 
-it('accepts long as the PHP integer constant discriminator', function (): void {
-    (new ReflectionClass(ModifyConstantLongTarget::class))->inject(ModifyConstantLongMixin::class);
+    it('accepts long as the PHP integer constant discriminator', function (): void {
+        (new ReflectionClass(ModifyConstantLongTarget::class))->inject(ModifyConstantLongMixin::class);
 
-    expect((new ModifyConstantLongTarget())->value(1))->toBe(13);
-});
+        expect((new ModifyConstantLongTarget())->value(1))->toBe(13);
+    });
 
-#[Mixin(ModifyConstantDoubleTarget::class)]
-final class ModifyConstantDoubleMixin
-{
-    private function __construct() {}
-    #[ModifyConstant('value', new At('CONSTANT'), type: 'double')]
-    public function replaceDouble(float $value): float
+    #[Mixin(ModifyConstantDoubleTarget::class)]
+    final class ModifyConstantDoubleMixin
     {
-        return $value + 1.5;
+        private function __construct() {}
+        #[ModifyConstant('value', new At('CONSTANT'), type: 'double')]
+        public function replaceDouble(float $value): float
+        {
+            return $value + 1.5;
+        }
     }
-}
 
 
-final class ModifyConstantDoubleTarget
-{
-    public function value(float $value): float
+    final class ModifyConstantDoubleTarget
     {
-        return $value + 2.5;
+        public function value(float $value): float
+        {
+            return $value + 2.5;
+        }
     }
-}
 
-it('accepts double as the PHP floating-point constant discriminator', function (): void {
-    (new ReflectionClass(ModifyConstantDoubleTarget::class))->inject(ModifyConstantDoubleMixin::class);
+    it('accepts double as the PHP floating-point constant discriminator', function (): void {
+        (new ReflectionClass(ModifyConstantDoubleTarget::class))->inject(ModifyConstantDoubleMixin::class);
 
-    expect((new ModifyConstantDoubleTarget())->value(1.0))->toBe(5.0);
-});
+        expect((new ModifyConstantDoubleTarget())->value(1.0))->toBe(5.0);
+    });
 
-#[Mixin(ModifyConstantClassTarget::class)]
-final class ModifyConstantClassMixin
-{
-    private function __construct() {}
-    #[ModifyConstant('value', new At('CONSTANT'), ModifyConstantClassTarget::class, 'class')]
-    public function replaceClass(string $value): string
+    #[Mixin(ModifyConstantClassTarget::class)]
+    final class ModifyConstantClassMixin
     {
-        return 'replaced';
+        private function __construct() {}
+        #[ModifyConstant('value', new At('CONSTANT'), ModifyConstantClassTarget::class, 'class')]
+        public function replaceClass(string $value): string
+        {
+            return 'replaced';
+        }
     }
-}
 
 
-final class ModifyConstantClassTarget
-{
-    public function value(): string
+    final class ModifyConstantClassTarget
     {
-        return self::class;
+        public function value(): string
+        {
+            return self::class;
+        }
     }
-}
 
-it('matches resolvable class-name constants without treating arbitrary strings as classes', function (): void {
-    (new ReflectionClass(ModifyConstantClassTarget::class))->inject(ModifyConstantClassMixin::class);
+    it('matches resolvable class-name constants without treating arbitrary strings as classes', function (): void {
+        (new ReflectionClass(ModifyConstantClassTarget::class))->inject(ModifyConstantClassMixin::class);
 
-    expect((new ModifyConstantClassTarget())->value())->toBe('replaced');
-});
+        expect((new ModifyConstantClassTarget())->value())->toBe('replaced');
+    });
 
-#[Mixin(ModifyConstantClassMissingTarget::class)]
-final class ModifyConstantClassMissingMixin
-{
-    private function __construct() {}
-    #[ModifyConstant('value', new At('CONSTANT'), type: 'class')]
-    public function replaceMissingClass(string $value): string
+    #[Mixin(ModifyConstantClassMissingTarget::class)]
+    final class ModifyConstantClassMissingMixin
     {
-        return 'replaced';
+        private function __construct() {}
+        #[ModifyConstant('value', new At('CONSTANT'), type: 'class')]
+        public function replaceMissingClass(string $value): string
+        {
+            return 'replaced';
+        }
     }
-}
 
 
-final class ModifyConstantClassMissingTarget
-{
-    public function value(): string
+    final class ModifyConstantClassMissingTarget
     {
-        return 'not-a-class';
+        public function value(): string
+        {
+            return 'not-a-class';
+        }
     }
-}
 
-it('rejects a class discriminator for an arbitrary string before mutation', function (): void {
-    expect(static function (): void {
-        (new ReflectionClass(ModifyConstantClassMissingTarget::class))->inject(ModifyConstantClassMissingMixin::class);
-    })->toThrow(InvalidArgumentException::class, 'did not match');
+    it('rejects a class discriminator for an arbitrary string before mutation', function (): void {
+        expect(static function (): void {
+            (new ReflectionClass(ModifyConstantClassMissingTarget::class))->inject(ModifyConstantClassMissingMixin::class);
+        })->toThrow(InvalidArgumentException::class, 'did not match');
 
-    expect((new ModifyConstantClassMissingTarget())->value())->toBe('not-a-class');
-});
+        expect((new ModifyConstantClassMissingTarget())->value())->toBe('not-a-class');
+    });
 
-#[Mixin(ModifyConstantNullTarget::class)]
-final class ModifyConstantNullMixin
-{
-    private function __construct() {}
-
-    #[ModifyConstant('value', new At('CONSTANT'), type: 'null', nullValue: true)]
-    public function replaceNull(mixed $constant): string
+    #[Mixin(ModifyConstantNullTarget::class)]
+    final class ModifyConstantNullMixin
     {
-        return 'replaced';
-    }
-}
+        private function __construct() {}
 
-final class ModifyConstantNullTarget
-{
-    public function value(bool $includeNull): string
+        #[ModifyConstant('value', new At('CONSTANT'), type: 'null', nullValue: true)]
+        public function replaceNull(mixed $constant): string
+        {
+            return 'replaced';
+        }
+    }
+
+    final class ModifyConstantNullTarget
     {
-        return ($includeNull ? null : 'kept') ?? 'fallback';
+        public function value(bool $includeNull): string
+        {
+            return ($includeNull ? null : 'kept') ?? 'fallback';
+        }
     }
-}
 
-it('matches null literals with the explicit nullValue discriminator', function (): void {
-    (new ReflectionClass(ModifyConstantNullTarget::class))->inject(ModifyConstantNullMixin::class);
+    it('matches null literals with the explicit nullValue discriminator', function (): void {
+        (new ReflectionClass(ModifyConstantNullTarget::class))->inject(ModifyConstantNullMixin::class);
 
-    expect((new ModifyConstantNullTarget())->value(true))->toBe('replaced');
-});
+        expect((new ModifyConstantNullTarget())->value(true))->toBe('replaced');
+    });
 
-it('rejects an inconsistent nullValue discriminator', function (): void {
-    expect(fn(): ModifyConstant => new ModifyConstant('value', new At('CONSTANT'), type: 'string', nullValue: true))
-        ->toThrow(InvalidArgumentException::class, 'nullValue requires the null type discriminator');
+    it('rejects an inconsistent nullValue discriminator', function (): void {
+        expect(fn(): ModifyConstant => new ModifyConstant('value', new At('CONSTANT'), type: 'string', nullValue: true))
+            ->toThrow(InvalidArgumentException::class, 'nullValue requires the null type discriminator');
+    });
 });

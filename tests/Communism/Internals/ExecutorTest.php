@@ -4,38 +4,42 @@ declare(strict_types=1);
 
 use Communism\Internals\Executor;
 
-function executorCoverageFirst(): string
-{
-    return 'first';
-}
+describe('Executor', function (): void {
+    covers(Executor::class);
 
-function executorCoverageSecond(): string
-{
-    return 'second';
-}
-
-it('swaps global function implementations and can restore them', function (): void {
-    expect(executorCoverageFirst())->toBe('first')
-        ->and(executorCoverageSecond())->toBe('second');
-
-    Executor::swapFunctions('executorCoverageFirst', 'executorCoverageSecond');
-
-    try {
-        expect(executorCoverageFirst())->toBe('second')
-            ->and(executorCoverageSecond())->toBe('first');
-    } finally {
-        Executor::swapFunctions('executorCoverageFirst', 'executorCoverageSecond');
+    function executorCoverageFirst(): string
+    {
+        return 'first';
     }
 
-    expect(executorCoverageFirst())->toBe('first')
-        ->and(executorCoverageSecond())->toBe('second');
-});
+    function executorCoverageSecond(): string
+    {
+        return 'second';
+    }
 
-it('rejects missing global functions and ignores swapping a function with itself', function (): void {
-    Executor::swapFunctions('executorCoverageFirst', 'executorCoverageFirst');
+    it('swaps global function implementations and can restore them', function (): void {
+        expect(executorCoverageFirst())->toBe('first')
+            ->and(executorCoverageSecond())->toBe('second');
 
-    expect(static function (): void {
-        Executor::swapFunctions('executorCoverageFirst', 'missingExecutorFunction');
-    })
-        ->toThrow(InvalidArgumentException::class);
+        Executor::swapFunctions('executorCoverageFirst', 'executorCoverageSecond');
+
+        try {
+            expect(executorCoverageFirst())->toBe('second')
+                ->and(executorCoverageSecond())->toBe('first');
+        } finally {
+            Executor::swapFunctions('executorCoverageFirst', 'executorCoverageSecond');
+        }
+
+        expect(executorCoverageFirst())->toBe('first')
+            ->and(executorCoverageSecond())->toBe('second');
+    });
+
+    it('rejects missing global functions and ignores swapping a function with itself', function (): void {
+        Executor::swapFunctions('executorCoverageFirst', 'executorCoverageFirst');
+
+        expect(static function (): void {
+            Executor::swapFunctions('executorCoverageFirst', 'missingExecutorFunction');
+        })
+            ->toThrow(InvalidArgumentException::class);
+    });
 });

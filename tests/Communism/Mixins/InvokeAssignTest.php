@@ -8,156 +8,160 @@ use Communism\Mixin\Inject;
 use Communism\Mixin\Mixin;
 use Communism\Reflect\ReflectionClass;
 
-function invokeAssignValue(string $value): string
-{
-    return strtoupper($value);
-}
+describe('Inject', function (): void {
+    covers([Inject::class, At::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
-function invokeAssignCaptured(): string
-{
-    $value = $GLOBALS['invoke_assign_captured'] ?? null;
-
-    return is_string($value) ? $value : '';
-}
-
-#[Mixin(InvokeAssignTarget::class)]
-final class InvokeAssignMixin
-{
-    private function __construct() {}
-    #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue'))]
-    public function afterAssignment(CallbackInfo $info, string $result): void
+    function invokeAssignValue(string $value): string
     {
-        $GLOBALS['invoke_assign_captured'] = $result;
+        return strtoupper($value);
     }
-}
 
-
-final class InvokeAssignTarget
-{
-    public function run(string $value): string
+    function invokeAssignCaptured(): string
     {
-        $result = invokeAssignValue($value);
+        $value = $GLOBALS['invoke_assign_captured'] ?? null;
 
-        return $result;
+        return is_string($value) ? $value : '';
     }
-}
 
-it('runs an INVOKE_ASSIGN callback after the local assignment', function (): void {
-    unset($GLOBALS['invoke_assign_captured']);
-    (new ReflectionClass(InvokeAssignTarget::class))->inject(InvokeAssignMixin::class);
-
-    expect((new InvokeAssignTarget())->run('needle'))->toBe('NEEDLE')
-        ->and(invokeAssignCaptured())->toBe('NEEDLE');
-});
-
-#[Mixin(InvokeAssignOrdinalTarget::class)]
-final class InvokeAssignOrdinalMixin
-{
-    private function __construct() {}
-    #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue', ordinal: 1))]
-    public function captureSecondAssignment(CallbackInfo $info, string $secondResult): void
+    #[Mixin(InvokeAssignTarget::class)]
+    final class InvokeAssignMixin
     {
-        $GLOBALS['invoke_assign_captured'] = $secondResult;
+        private function __construct() {}
+        #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue'))]
+        public function afterAssignment(CallbackInfo $info, string $result): void
+        {
+            $GLOBALS['invoke_assign_captured'] = $result;
+        }
     }
-}
 
 
-final class InvokeAssignOrdinalTarget
-{
-    public function run(string $first, string $second): string
+    final class InvokeAssignTarget
     {
-        $firstResult = invokeAssignValue($first);
-        $secondResult = invokeAssignValue($second);
+        public function run(string $value): string
+        {
+            $result = invokeAssignValue($value);
 
-        return $firstResult . ':' . $secondResult;
+            return $result;
+        }
     }
-}
 
-it('selects one INVOKE_ASSIGN occurrence by ordinal', function (): void {
-    unset($GLOBALS['invoke_assign_captured']);
-    (new ReflectionClass(InvokeAssignOrdinalTarget::class))->inject(InvokeAssignOrdinalMixin::class);
+    it('runs an INVOKE_ASSIGN callback after the local assignment', function (): void {
+        unset($GLOBALS['invoke_assign_captured']);
+        (new ReflectionClass(InvokeAssignTarget::class))->inject(InvokeAssignMixin::class);
 
-    expect((new InvokeAssignOrdinalTarget())->run('first', 'second'))->toBe('FIRST:SECOND')
-        ->and(invokeAssignCaptured())->toBe('SECOND');
-});
+        expect((new InvokeAssignTarget())->run('needle'))->toBe('NEEDLE')
+            ->and(invokeAssignCaptured())->toBe('NEEDLE');
+    });
 
-#[Mixin(InvokeAssignMissingTarget::class)]
-final class InvokeAssignMissingMixin
-{
-    private function __construct() {}
-    #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue'))]
-    public function afterMissingAssignment(): void {}
-}
-
-
-final class InvokeAssignMissingTarget
-{
-    public function run(string $value): string
+    #[Mixin(InvokeAssignOrdinalTarget::class)]
+    final class InvokeAssignOrdinalMixin
     {
-        return invokeAssignValue($value);
+        private function __construct() {}
+        #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue', ordinal: 1))]
+        public function captureSecondAssignment(CallbackInfo $info, string $secondResult): void
+        {
+            $GLOBALS['invoke_assign_captured'] = $secondResult;
+        }
     }
-}
 
-it('rejects INVOKE_ASSIGN when the invocation result is not assigned', function (): void {
-    expect(function (): void {
-        (new ReflectionClass(InvokeAssignMissingTarget::class))->inject(InvokeAssignMissingMixin::class);
-    })->toThrow(InvalidArgumentException::class, 'Injection point did not match');
 
-    expect((new InvokeAssignMissingTarget())->run('needle'))->toBe('NEEDLE');
-});
-
-#[Mixin(InvokeAssignQuantifierTarget::class)]
-final class InvokeAssignQuantifierMixin
-{
-    private function __construct() {}
-
-    #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue{1}'))]
-    public function captureFirstAssignment(CallbackInfo $info, string $result): void
+    final class InvokeAssignOrdinalTarget
     {
-        $GLOBALS['invoke_assign_captured'] = $result;
-    }
-}
+        public function run(string $first, string $second): string
+        {
+            $firstResult = invokeAssignValue($first);
+            $secondResult = invokeAssignValue($second);
 
-final class InvokeAssignQuantifierTarget
-{
-    public function run(string $first, string $second): string
+            return $firstResult . ':' . $secondResult;
+        }
+    }
+
+    it('selects one INVOKE_ASSIGN occurrence by ordinal', function (): void {
+        unset($GLOBALS['invoke_assign_captured']);
+        (new ReflectionClass(InvokeAssignOrdinalTarget::class))->inject(InvokeAssignOrdinalMixin::class);
+
+        expect((new InvokeAssignOrdinalTarget())->run('first', 'second'))->toBe('FIRST:SECOND')
+            ->and(invokeAssignCaptured())->toBe('SECOND');
+    });
+
+    #[Mixin(InvokeAssignMissingTarget::class)]
+    final class InvokeAssignMissingMixin
     {
-        $firstResult = invokeAssignValue($first);
-        $secondResult = invokeAssignValue($second);
-
-        return $firstResult . ':' . $secondResult;
+        private function __construct() {}
+        #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue'))]
+        public function afterMissingAssignment(): void {}
     }
-}
 
-it('limits invocation matches with a selector quantifier', function (): void {
-    unset($GLOBALS['invoke_assign_captured']);
-    (new ReflectionClass(InvokeAssignQuantifierTarget::class))->inject(InvokeAssignQuantifierMixin::class);
 
-    expect((new InvokeAssignQuantifierTarget())->run('first', 'second'))->toBe('FIRST:SECOND')
-        ->and(invokeAssignCaptured())->toBe('first');
-});
-
-#[Mixin(InvokeAssignQuantifierMissingTarget::class)]
-final class InvokeAssignQuantifierMissingMixin
-{
-    private function __construct() {}
-
-    #[Inject('run', new At('INVOKE', 'invokeAssignValue{3}'))]
-    public function neverRuns(): void {}
-}
-
-final class InvokeAssignQuantifierMissingTarget
-{
-    public function run(string $value): string
+    final class InvokeAssignMissingTarget
     {
-        return invokeAssignValue($value);
+        public function run(string $value): string
+        {
+            return invokeAssignValue($value);
+        }
     }
-}
 
-it('rejects invocation selectors outside their quantifier bounds before mutation', function (): void {
-    expect(static function (): void {
-        (new ReflectionClass(InvokeAssignQuantifierMissingTarget::class))->inject(InvokeAssignQuantifierMissingMixin::class);
-    })->toThrow(InvalidArgumentException::class, 'outside its quantifier bounds');
+    it('rejects INVOKE_ASSIGN when the invocation result is not assigned', function (): void {
+        expect(function (): void {
+            (new ReflectionClass(InvokeAssignMissingTarget::class))->inject(InvokeAssignMissingMixin::class);
+        })->toThrow(InvalidArgumentException::class, 'Injection point did not match');
 
-    expect((new InvokeAssignQuantifierMissingTarget())->run('needle'))->toBe('NEEDLE');
+        expect((new InvokeAssignMissingTarget())->run('needle'))->toBe('NEEDLE');
+    });
+
+    #[Mixin(InvokeAssignQuantifierTarget::class)]
+    final class InvokeAssignQuantifierMixin
+    {
+        private function __construct() {}
+
+        #[Inject('run', new At('INVOKE_ASSIGN', 'invokeAssignValue{1}'))]
+        public function captureFirstAssignment(CallbackInfo $info, string $result): void
+        {
+            $GLOBALS['invoke_assign_captured'] = $result;
+        }
+    }
+
+    final class InvokeAssignQuantifierTarget
+    {
+        public function run(string $first, string $second): string
+        {
+            $firstResult = invokeAssignValue($first);
+            $secondResult = invokeAssignValue($second);
+
+            return $firstResult . ':' . $secondResult;
+        }
+    }
+
+    it('limits invocation matches with a selector quantifier', function (): void {
+        unset($GLOBALS['invoke_assign_captured']);
+        (new ReflectionClass(InvokeAssignQuantifierTarget::class))->inject(InvokeAssignQuantifierMixin::class);
+
+        expect((new InvokeAssignQuantifierTarget())->run('first', 'second'))->toBe('FIRST:SECOND')
+            ->and(invokeAssignCaptured())->toBe('first');
+    });
+
+    #[Mixin(InvokeAssignQuantifierMissingTarget::class)]
+    final class InvokeAssignQuantifierMissingMixin
+    {
+        private function __construct() {}
+
+        #[Inject('run', new At('INVOKE', 'invokeAssignValue{3}'))]
+        public function neverRuns(): void {}
+    }
+
+    final class InvokeAssignQuantifierMissingTarget
+    {
+        public function run(string $value): string
+        {
+            return invokeAssignValue($value);
+        }
+    }
+
+    it('rejects invocation selectors outside their quantifier bounds before mutation', function (): void {
+        expect(static function (): void {
+            (new ReflectionClass(InvokeAssignQuantifierMissingTarget::class))->inject(InvokeAssignQuantifierMissingMixin::class);
+        })->toThrow(InvalidArgumentException::class, 'outside its quantifier bounds');
+
+        expect((new InvokeAssignQuantifierMissingTarget())->run('needle'))->toBe('NEEDLE');
+    });
 });

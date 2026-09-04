@@ -50,28 +50,28 @@ it('rejects malformed multi-target Inject declarations', function (): void {
 });
 
 describe('TargetMethods', function (): void {
-    covers(TargetMethods::class);
+    covers([TargetMethods::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('normalizes valid injection target method lists', function (): void {
 
-    expect(TargetMethods::normalize('run'))->toBe(['run'])
-        ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second'])
-        ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second']);
+        expect(TargetMethods::normalize('run'))->toBe(['run'])
+            ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second'])
+            ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second']);
 
-    expect(static fn() => TargetMethods::normalize([]))->toThrow(InvalidArgumentException::class)
-        ->and(static fn() => TargetMethods::normalize(['first' => 'run']))->toThrow(InvalidArgumentException::class)
-        ->and(static fn() => TargetMethods::normalize(['']))->toThrow(InvalidArgumentException::class);
+        expect(static fn() => TargetMethods::normalize([]))->toThrow(InvalidArgumentException::class)
+            ->and(static fn() => TargetMethods::normalize(['first' => 'run']))->toThrow(InvalidArgumentException::class)
+            ->and(static fn() => TargetMethods::normalize(['']))->toThrow(InvalidArgumentException::class);
     });
 });
 
 describe('Inject', function (): void {
-    covers(Inject::class);
+    covers([Inject::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('normalizes Inject targets and rejects invalid target values', function (): void {
 
-    $inject = new Inject(['first', 'second'], new At('HEAD'));
-    expect($inject->method)->toBe('first')->and($inject->targets)->toBe(['first', 'second']);
-    expect(static fn() => new Inject(['first', 42], new At('HEAD')))
-        ->toThrow(InvalidArgumentException::class);
+        $inject = new Inject(['first', 'second'], new At('HEAD'));
+        expect($inject->method)->toBe('first')->and($inject->targets)->toBe(['first', 'second']);
+        expect(static fn() => new Inject(['first', 42], new At('HEAD')))
+            ->toThrow(InvalidArgumentException::class);
     });
 });

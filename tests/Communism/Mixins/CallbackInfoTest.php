@@ -269,12 +269,12 @@ it('rejects contradictory callback binding declarations', function (): void {
 });
 
 describe('Parameter', function (): void {
-    covers(Parameter::class);
+    covers([Parameter::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('rejects an empty explicit callback parameter name', function (): void {
 
-    expect(static fn() => new Parameter(name: ''))
-        ->toThrow(InvalidArgumentException::class, 'name');
+        expect(static fn() => new Parameter(name: ''))
+            ->toThrow(InvalidArgumentException::class, 'name');
     });
 });
 

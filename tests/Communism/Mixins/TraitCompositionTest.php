@@ -454,12 +454,12 @@ it('uses an unprefixed interface method when InterfaceRemap::ALL allows it', fun
 });
 
 describe('Unique', function (): void {
-    covers(Unique::class);
+    covers([Unique::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('defaults Unique to non-silent and accepts silent mode', function (): void {
 
-    expect((new Unique())->silent)->toBeFalse()
-        ->and((new Unique(true))->silent)->toBeTrue();
+        expect((new Unique())->silent)->toBeFalse()
+            ->and((new Unique(true))->silent)->toBeTrue();
     });
 });
 
@@ -484,15 +484,15 @@ it('rejects an unprefixed interface method when remapping is restricted', functi
 });
 
 describe('Interface_', function (): void {
-    covers(Interface_::class);
+    covers([Interface_::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('rejects undeclared interfaces and invalid interface prefixes', function (): void {
 
-    expect(static fn() => new Interface_('MissingInterfaceForCoverage', 'prefix_'))
-        ->toThrow(InvalidArgumentException::class, 'declared interface')
-        ->and(static fn() => new Interface_(ComposedContract::class, ''))
-        ->toThrow(InvalidArgumentException::class, 'identifier prefix')
-        ->and(static fn() => new Interface_(ComposedContract::class, 'not-valid-'))
-        ->toThrow(InvalidArgumentException::class, 'identifier prefix');
+        expect(static fn() => new Interface_('MissingInterfaceForCoverage', 'prefix_'))
+            ->toThrow(InvalidArgumentException::class, 'declared interface')
+            ->and(static fn() => new Interface_(ComposedContract::class, ''))
+            ->toThrow(InvalidArgumentException::class, 'identifier prefix')
+            ->and(static fn() => new Interface_(ComposedContract::class, 'not-valid-'))
+            ->toThrow(InvalidArgumentException::class, 'identifier prefix');
     });
 });

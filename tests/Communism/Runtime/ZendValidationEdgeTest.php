@@ -93,22 +93,22 @@ it('reports Dynamic context when an annotated injection target is missing', func
 });
 
 describe('TransformationSnapshot', function (): void {
-    covers(TransformationSnapshot::class);
+    covers([TransformationSnapshot::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('reports changed methods in transformation snapshots', function (): void {
 
-    $snapshot = new TransformationSnapshot(
-        'Target',
-        'Mixin',
-        ['same' => 'a', 'removed' => 'b'],
-        ['same' => 'a', 'changed' => 'c'],
-    );
+        $snapshot = new TransformationSnapshot(
+            'Target',
+            'Mixin',
+            ['same' => 'a', 'removed' => 'b'],
+            ['same' => 'a', 'changed' => 'c'],
+        );
 
-    expect($snapshot->changedMethods())->toBe(['changed', 'removed'])
-        ->and($snapshot->diff())->toBe([
-            ['method' => 'changed', 'before' => null, 'after' => 'c'],
-            ['method' => 'removed', 'before' => 'b', 'after' => null],
-        ]);
+        expect($snapshot->changedMethods())->toBe(['changed', 'removed'])
+            ->and($snapshot->diff())->toBe([
+                ['method' => 'changed', 'before' => null, 'after' => 'c'],
+                ['method' => 'removed', 'before' => 'b', 'after' => null],
+            ]);
     });
 });
 

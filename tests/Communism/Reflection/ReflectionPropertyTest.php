@@ -4,111 +4,115 @@ declare(strict_types=1);
 
 use Communism\Reflect\ReflectionProperty;
 
-final class ReflectionPropertyCoverageTarget
-{
-    public static string $staticValue = 'initial';
-    public string $publicValue = 'initial';
-}
+describe('ReflectionProperty', function (): void {
+    covers(ReflectionProperty::class);
 
-final class ReflectionPropertyHookCoverageTarget
-{
-    public string $hooked {
-        set => $value;
+    final class ReflectionPropertyCoverageTarget
+    {
+        public static string $staticValue = 'initial';
+        public string $publicValue = 'initial';
     }
-}
 
-it('reads and writes static and instance properties through the wrapper', function (): void {
-    $instance = new ReflectionPropertyCoverageTarget();
-    $instanceProperty = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
-    $staticProperty = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'staticValue');
+    final class ReflectionPropertyHookCoverageTarget
+    {
+        public string $hooked {
+            set => $value;
+        }
+    }
 
-    expect($instanceProperty->getName())->toBe('publicValue')
-        ->and($instanceProperty->getDeclaringClass()->getName())->toBe(ReflectionPropertyCoverageTarget::class)
-        ->and($instanceProperty->isReadOnly())->toBeFalse();
+    it('reads and writes static and instance properties through the wrapper', function (): void {
+        $instance = new ReflectionPropertyCoverageTarget();
+        $instanceProperty = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
+        $staticProperty = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'staticValue');
 
-    $instanceProperty->setValueOnInstance($instance, 'changed');
-    $staticProperty->setStaticValue('also changed');
+        expect($instanceProperty->getName())->toBe('publicValue')
+            ->and($instanceProperty->getDeclaringClass()->getName())->toBe(ReflectionPropertyCoverageTarget::class)
+            ->and($instanceProperty->isReadOnly())->toBeFalse();
 
-    expect($instanceProperty->withPublic(static fn(): string => 'public'))->toBe('public')
-        ->and($staticProperty->withProtected(static fn(): string => 'protected'))->toBe('protected');
+        $instanceProperty->setValueOnInstance($instance, 'changed');
+        $staticProperty->setStaticValue('also changed');
 
-    $staticProperty->setPublicSet();
-    $staticProperty->setProtectedSet();
-    $staticProperty->setPrivateSet();
+        expect($instanceProperty->withPublic(static fn(): string => 'public'))->toBe('public')
+            ->and($staticProperty->withProtected(static fn(): string => 'protected'))->toBe('protected');
 
-    expect($instance->publicValue)->toBe('changed')
-        ->and(ReflectionPropertyCoverageTarget::$staticValue)->toBe('also changed');
+        $staticProperty->setPublicSet();
+        $staticProperty->setProtectedSet();
+        $staticProperty->setPrivateSet();
 
-    expect(static function () use ($staticProperty, $instance): void {
-        $staticProperty->setValueOnInstance($instance, 'invalid');
-    })
-        ->toThrow(LogicException::class);
-    expect(static function () use ($instanceProperty): void {
-        $instanceProperty->setStaticValue('invalid');
-    })
-        ->toThrow(LogicException::class);
-    expect(static function () use ($instanceProperty): void {
-        $instanceProperty->setValueOnInstance(new stdClass(), 'invalid');
-    })
-        ->toThrow(InvalidArgumentException::class);
-});
+        expect($instance->publicValue)->toBe('changed')
+            ->and(ReflectionPropertyCoverageTarget::$staticValue)->toBe('also changed');
 
-it('temporarily changes property visibility and restores it after callbacks', function (): void {
-    $property = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
-
-    $result = $property->withPrivate(function (): string {
-        expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPrivate())
-            ->toBeTrue();
-
-        return 'result';
+        expect(static function () use ($staticProperty, $instance): void {
+            $staticProperty->setValueOnInstance($instance, 'invalid');
+        })
+            ->toThrow(LogicException::class);
+        expect(static function () use ($instanceProperty): void {
+            $instanceProperty->setStaticValue('invalid');
+        })
+            ->toThrow(LogicException::class);
+        expect(static function () use ($instanceProperty): void {
+            $instanceProperty->setValueOnInstance(new stdClass(), 'invalid');
+        })
+            ->toThrow(InvalidArgumentException::class);
     });
 
-    expect($result)->toBe('result')
-        ->and((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPublic())->toBeTrue();
+    it('temporarily changes property visibility and restores it after callbacks', function (): void {
+        $property = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
 
-    expect(fn(): mixed => $property->withProtected(static function (): never {
-        throw new RuntimeException('callback failed');
-    }))->toThrow(RuntimeException::class);
-    expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPublic())->toBeTrue();
-});
+        $result = $property->withPrivate(function (): string {
+            expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPrivate())
+                ->toBeTrue();
 
-it('sets property flags and restores readonly state', function (): void {
-    $property = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
+            return 'result';
+        });
 
-    $property->setPrivate();
-    expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPrivate())->toBeTrue();
+        expect($result)->toBe('result')
+            ->and((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPublic())->toBeTrue();
 
-    $property->setPrivate(false);
-    $property->setPublic();
-    $property->setPublic(false);
-    $property->setProtected();
-    $property->setProtected(false);
-    $property->setPublic();
-    $property->setReadonly();
-    expect($property->isReadOnly())->toBeTrue();
+        expect(fn(): mixed => $property->withProtected(static function (): never {
+            throw new RuntimeException('callback failed');
+        }))->toThrow(RuntimeException::class);
+        expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPublic())->toBeTrue();
+    });
 
-    $property->setReadonly(false);
-    expect($property->isReadOnly())->toBeFalse();
-});
+    it('sets property flags and restores readonly state', function (): void {
+        $property = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
 
-it('leaves property-set visibility unchanged when no property hook exists', function (): void {
-    $property = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
+        $property->setPrivate();
+        expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPrivate())->toBeTrue();
 
-    $property->setPublicSet();
-    $property->setProtectedSet();
-    $property->setPrivateSet();
+        $property->setPrivate(false);
+        $property->setPublic();
+        $property->setPublic(false);
+        $property->setProtected();
+        $property->setProtected(false);
+        $property->setPublic();
+        $property->setReadonly();
+        expect($property->isReadOnly())->toBeTrue();
 
-    expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPublic())->toBeTrue();
-});
+        $property->setReadonly(false);
+        expect($property->isReadOnly())->toBeFalse();
+    });
 
-it('changes property-set visibility when a hook exists', function (): void {
-    $property = new ReflectionProperty(ReflectionPropertyHookCoverageTarget::class, 'hooked');
+    it('leaves property-set visibility unchanged when no property hook exists', function (): void {
+        $property = new ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue');
 
-    $property->setProtectedSet();
-    $property->setPrivateSet();
-    $property->setPublicSet(false);
-    $property->setPublicSet();
+        $property->setPublicSet();
+        $property->setProtectedSet();
+        $property->setPrivateSet();
 
-    expect((new \ReflectionProperty(ReflectionPropertyHookCoverageTarget::class, 'hooked'))->hasHooks())
-        ->toBeTrue();
+        expect((new \ReflectionProperty(ReflectionPropertyCoverageTarget::class, 'publicValue'))->isPublic())->toBeTrue();
+    });
+
+    it('changes property-set visibility when a hook exists', function (): void {
+        $property = new ReflectionProperty(ReflectionPropertyHookCoverageTarget::class, 'hooked');
+
+        $property->setProtectedSet();
+        $property->setPrivateSet();
+        $property->setPublicSet(false);
+        $property->setPublicSet();
+
+        expect((new \ReflectionProperty(ReflectionPropertyHookCoverageTarget::class, 'hooked'))->hasHooks())
+            ->toBeTrue();
+    });
 });

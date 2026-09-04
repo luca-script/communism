@@ -28,24 +28,24 @@ function needleCoverageFunction(string $value): string
 }
 
 describe('ReferenceMap', function (): void {
-    covers(ReferenceMap::class);
+    covers([ReferenceMap::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     it('remaps reference-map selectors and aliases', function (): void {
 
-    $map = new ReferenceMap(methods: ['logical' => 'mapped', 'alias' => 'renamed'], fields: ['field' => 'property']);
+        $map = new ReferenceMap(methods: ['logical' => 'mapped', 'alias' => 'renamed'], fields: ['field' => 'property']);
 
-    expect($map->method('missing'))->toBe('missing')
-        ->and($map->field('missing'))->toBe('missing')
-        ->and($map->invocation('logical'))->toBe('mapped')
-        ->and($map->invocation(new Desc('logical')))->toBe(['mapped', ['signature' => ['parameters' => [], 'return' => 'void']]])
-        ->and($map->invocation(['logical', ['aliases' => ['alias', 42]]]))->toBe(['mapped', ['aliases' => ['renamed', 42]]])
-        ->and($map->invocation(['logical', ['aliases' => 'not-a-list']]))->toBe(['mapped', ['aliases' => 'not-a-list']])
-        ->and($map->invocation([42]))->toBe([42])
-        ->and($map->fieldTarget('field'))->toBe('property')
-        ->and($map->fieldTarget(['field', ['aliases' => ['field', 42]]]))->toBe(['property', ['aliases' => ['property', 42]]])
-        ->and($map->fieldTarget([42]))->toBe([42]);
+        expect($map->method('missing'))->toBe('missing')
+            ->and($map->field('missing'))->toBe('missing')
+            ->and($map->invocation('logical'))->toBe('mapped')
+            ->and($map->invocation(new Desc('logical')))->toBe(['mapped', ['signature' => ['parameters' => [], 'return' => 'void']]])
+            ->and($map->invocation(['logical', ['aliases' => ['alias', 42]]]))->toBe(['mapped', ['aliases' => ['renamed', 42]]])
+            ->and($map->invocation(['logical', ['aliases' => 'not-a-list']]))->toBe(['mapped', ['aliases' => 'not-a-list']])
+            ->and($map->invocation([42]))->toBe([42])
+            ->and($map->fieldTarget('field'))->toBe('property')
+            ->and($map->fieldTarget(['field', ['aliases' => ['field', 42]]]))->toBe(['property', ['aliases' => ['property', 42]]])
+            ->and($map->fieldTarget([42]))->toBe([42]);
 
-    expect(static fn() => new ReferenceMap(methods: ['bad name' => 'ok']))->toThrow(InvalidArgumentException::class);
+        expect(static fn() => new ReferenceMap(methods: ['bad name' => 'ok']))->toThrow(InvalidArgumentException::class);
     });
 });
 

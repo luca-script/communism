@@ -224,8 +224,8 @@ exists upstream.
 - [x] PHPStan bytecode target validation, including inherited methods resolved
       through their declaring class and actual injection-point matching.
 - `[x]` compile-time resolution of statically resolvable transitive include /
-      require targets, including `__DIR__` concatenations, cycle detection,
-      detached declaration merging, and missing-required-target diagnostics.
+  require targets, including `__DIR__` concatenations, cycle detection,
+  detached declaration merging, and missing-required-target diagnostics.
 
 - `[x]` declarative mixin configurations with target lists, priority, required
   flag, compatibility version, and environment side through
