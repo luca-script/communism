@@ -121,6 +121,7 @@ describe('Coerce', function (): void {
 
     final class CoerceDynamicReceiverTarget
     {
+        /** @param CoerceReceiverService $service */
         public function run($service, string $value): string
         {
             return $service->hidden($value);
@@ -147,6 +148,7 @@ describe('Coerce', function (): void {
 
     final class CoerceDynamicReceiverRejectTarget
     {
+        /** @param CoerceReceiverService $service */
         public function run($service, string $value): string
         {
             return $service->hidden($value);

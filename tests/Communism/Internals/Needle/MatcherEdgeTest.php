@@ -17,6 +17,7 @@ describe('Matcher', function (): void {
     final class MatcherReturnTypeFixture
     {
         public int $typedProperty = 0;
+        /** @var mixed */
         public $untypedProperty;
 
         public static function returnsInt(): int

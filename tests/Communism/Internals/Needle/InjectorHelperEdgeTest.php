@@ -29,6 +29,25 @@ describe('Injector', function (): void {
         return $value;
     }
 
+    function injectorCallOperand(Closure $call, string $name, mixed ...$arguments): Operand
+    {
+        $result = $call($name, ...$arguments);
+        if (!$result instanceof Operand) {
+            throw new LogicException('Expected an Operand result.');
+        }
+        return $result;
+    }
+
+    /** @return array<mixed, mixed> */
+    function injectorCallArray(Closure $call, string $name, mixed ...$arguments): array
+    {
+        $result = $call($name, ...$arguments);
+        if (!is_array($result)) {
+            throw new LogicException('Expected an array result.');
+        }
+        return $result;
+    }
+
     function injectorHelperFloat(float $value): float
     {
         return $value;
@@ -44,44 +63,45 @@ describe('Injector', function (): void {
         return $value;
     }
 
-    #[Coerce]
-    function injectorHelperCoercedString(string $value): string
+    function injectorHelperCoercedString(#[Coerce] string $value): string
     {
         return $value;
     }
 
-    #[Coerce]
-    function injectorHelperCoercedArray(array $value): array
+    /**
+     * @param array<int, mixed> $value
+     * @return array<int, mixed>
+     */
+    function injectorHelperCoercedArray(#[Coerce] array $value): array
     {
         return $value;
     }
 
-    #[Coerce]
-    function injectorHelperCoercedIterable(iterable $value): iterable
+    /**
+     * @param iterable<int, mixed> $value
+     * @return iterable<int, mixed>
+     */
+    function injectorHelperCoercedIterable(#[Coerce] iterable $value): iterable
     {
         return $value;
     }
 
-    #[Coerce]
-    function injectorHelperCoercedNoReturn(mixed $value)
+    function injectorHelperCoercedNoReturn(#[Coerce] mixed $value): mixed
     {
         return $value;
     }
 
-    #[Coerce]
-    function injectorHelperCoercedInt(int $value): int
+    function injectorHelperCoercedInt(#[Coerce] int $value): int
     {
         return $value;
     }
 
-    #[Coerce]
-    function injectorHelperCoercedStdClass(stdClass $value): stdClass
+    function injectorHelperCoercedStdClass(#[Coerce] stdClass $value): stdClass
     {
         return $value;
     }
 
-    #[Coerce]
-    function injectorHelperCoercedUnion(bool|stdClass|string $value): void {}
+    function injectorHelperCoercedUnion(#[Coerce] bool|stdClass|string $value): void {}
 
     function injectorHelperVariadicInt(int ...$values): void {}
 
@@ -117,7 +137,9 @@ describe('Injector', function (): void {
 
     function injectorHelperCallbackWithPositionalLocal(CallbackInfo $info, string $value, string $other): void {}
 
-    function injectorHelperDuplicateLocal(CallbackInfo $info, #[Local] #[Local] string $value): void {}
+    eval(<<<'PHP'
+    function injectorHelperDuplicateLocal(\Communism\Mixin\CallbackInfo $info, #[\Communism\Mixin\Local] #[\Communism\Mixin\Local] string $value): void {}
+    PHP);
 
     /** @param CallbackInfoReturnable<mixed> $info */
     function injectorHelperCallbackWithReturnable(CallbackInfoReturnable $info): void {}
@@ -135,6 +157,7 @@ describe('Injector', function (): void {
 
     function injectorUntypedParameter(mixed $value): void {}
 
+    /** @param mixed $value */
     function injectorNoTypeParameter($value): void {}
 
     function injectorOtherNamedParameter(string $other): void {}
@@ -179,7 +202,7 @@ describe('Injector', function (): void {
 
     function injectorReflectionUnion(int|string $value): int|float
     {
-        return is_int($value) ? $value : strlen($value);
+        return is_int($value) ? $value : (strlen($value) > 0 ? 1.0 : 0);
     }
 
     function injectorReflectionIntersection(InjectorReflectionLeft&InjectorReflectionRight $value): void {}
@@ -191,11 +214,22 @@ describe('Injector', function (): void {
 
     function injectorReflectionCoercionUnion(): float|bool|string|stdClass
     {
-        return 1.0;
+        if (getenv('INJECTOR_COVERAGE_BOOL') === '1') {
+            return false;
+        }
+        if (getenv('INJECTOR_COVERAGE_STRING') === '1') {
+            return 'value';
+        }
+        if (getenv('INJECTOR_COVERAGE_FLOAT') === '1') {
+            return 1.0;
+        }
+        return new stdClass();
     }
 
+    /** @param iterable<int, mixed> $value */
     function injectorReflectionIterable(iterable $value): void {}
 
+    /** @return array<int, string> */
     function injectorLiteralArray(): array
     {
         return ['value'];
@@ -279,7 +313,7 @@ describe('Injector', function (): void {
             ->and($call('reflectionTypeAccepts', $integer, $unionParameter))->toBeFalse()
             ->and($call('reflectionTypeAccepts', $intersection, $valueReturn))->toBeTrue()
             ->and($call('reflectionTypeAccepts', $intersection, $leftValueReturn))->toBeFalse()
-            ->and($call('reflectionTypeAccepts', $call('reflection', 'injectorHelperObject')->getReturnType(), $intersection))->toBeFalse()
+            ->and($call('reflectionTypeAccepts', (new ReflectionFunction('injectorHelperObject'))->getReturnType(), $intersection))->toBeFalse()
             ->and($call('reflectionTypeCanCoerce', $unionReturn, $integer))->toBeTrue()
             ->and($call('reflectionTypeCanCoerce', $integer, $string))->toBeFalse()
             ->and($call('reflectionTypeCanCoerce', $intersection, $intersection))->toBeFalse()
@@ -295,7 +329,7 @@ describe('Injector', function (): void {
             ->and($call('reflectionCoercionCastType', $coercionUnion, $integer))->toBe(5)
             ->and($call('namedCoercionCastType', 'string', $integer))->toBe(6)
             ->and($call('namedCoercionCastType', 'bool', $string))->toBe(3)
-            ->and($call('namedCoercionCastType', 'int', $call('reflection', 'injectorHelperFloat')->getParameters()[0]->getType()))->toBe(4)
+            ->and($call('namedCoercionCastType', 'int', (new ReflectionFunction('injectorHelperFloat'))->getParameters()[0]->getType()))->toBe(4)
             ->and($call('namedCoercionCastType', 'float', $integer))->toBe(5)
             ->and($call('namedCoercionCastType', 'array', $iterable))->toBe(7)
             ->and($call('namedCoercionCastType', 'stdClass', $integer))->toBeNull()
@@ -307,7 +341,7 @@ describe('Injector', function (): void {
             ->and($call('namedCoercionCastType', 'iterable', $arrayReturn))->toBeNull()
             ->and($call('namedCoercionCastType', 'stdClass&InjectorReflectionLeft|array', $integer))->toBeNull()
             ->and($call('reflectionCoercionCastType', $iterable, $arrayReturn))->toBeNull()
-            ->and($call('reflectionCoercionCastType', $coercionUnion, $call('reflection', 'injectorHelperObject')->getReturnType()))->toBeNull();
+            ->and($call('reflectionCoercionCastType', $coercionUnion, (new ReflectionFunction('injectorHelperObject'))->getReturnType()))->toBeNull();
     });
 
     it('validates and coerces virtual argument operands by reflected parameter type', function (): void {
@@ -318,8 +352,8 @@ describe('Injector', function (): void {
 
         expect($call('validateArgsValue', null, 0, Operand::constant(1, 0)))->toBeInstanceOf(Operand::class)
             ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(1, 0)))->toEqual(Operand::constant(1, 0))
-            ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(2.5, 0), true)->value)->toBe(2)
-            ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperFloat'), 0, Operand::constant(2, 0), true)->value)->toBe(2.0)
+            ->and(injectorCallOperand($call, 'validateArgsValue', new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(2.5, 0), true)->value)->toBe(2)
+            ->and(injectorCallOperand($call, 'validateArgsValue', new ReflectionFunction('injectorHelperFloat'), 0, Operand::constant(2, 0), true)->value)->toBe(2.0)
             ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperBool'), 0, Operand::constant(true, 0)))->toEqual(Operand::constant(true, 0))
             ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperString'), 0, Operand::constant('value', 0)))->toEqual(Operand::constant('value', 0))
             ->and($call('validateArgsValue', new ReflectionFunction('injectorNoTypeParameter'), 0, Operand::constant([], 0)))->toEqual(Operand::constant([], 0));
@@ -337,33 +371,33 @@ describe('Injector', function (): void {
         ] as $function => $actualType) {
             $target = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => $actualType]);
             $cv = Operand::cv(0);
-            $result = $call('coerceArgsOperand', $target, $handler, new ReflectionFunction($function), 0, $cv, true, 0, 0, [$cv]);
+            $result = injectorCallArray($call, 'coerceArgsOperand', $target, $handler, new ReflectionFunction($function), 0, $cv, true, 0, 0, [$cv]);
             expect($result[1])->toBeInstanceOf(Instruction::class)
                 ->and($result[2])->toBe(1);
         }
 
         $target = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => 'string']);
         $cv = Operand::cv(0);
-        expect($call('coerceArgsOperand', $target, $handler, null, 0, $cv, true, 0, 0, [$cv]))
+        expect(injectorCallArray($call, 'coerceArgsOperand', $target, $handler, null, 0, $cv, true, 0, 0, [$cv]))
             ->toEqual([$cv, null, 0])
-            ->and($call('coerceArgsOperand', $target, $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(1, 0), true, 0, 0, []))
+            ->and(injectorCallArray($call, 'coerceArgsOperand', $target, $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(1, 0), true, 0, 0, []))
             ->toEqual([Operand::constant(1, 0), null, 0]);
 
         $variadic = new ReflectionFunction('injectorHelperVariadicInt');
-        expect($call('coerceArgsOperand', $target, $handler, $variadic, 2, $cv, true, 0, 0, [$cv]))
+        expect(injectorCallArray($call, 'coerceArgsOperand', $target, $handler, $variadic, 2, $cv, true, 0, 0, [$cv]))
             ->toBeArray();
-        expect($call('coerceArgsOperand', new MethodBody('argument-target', null, 0, 0, [], variableTypes: [9 => 'object']), $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(9), true, 0, 0, []))
+        expect(injectorCallArray($call, 'coerceArgsOperand', new MethodBody('argument-target', null, 0, 0, [], variableTypes: [9 => 'object']), $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(9), true, 0, 0, []))
             ->toEqual([Operand::cv(9), null, 0]);
-        expect($call('coerceArgsOperand', new MethodBody('argument-target', null, 0, 0, []), $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(9), true, 0, 0, []))
+        expect(injectorCallArray($call, 'coerceArgsOperand', new MethodBody('argument-target', null, 0, 0, []), $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(9), true, 0, 0, []))
             ->toEqual([Operand::cv(9), null, 0]);
         $intTarget = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => 'int']);
-        expect($call('coerceArgsOperand', $intTarget, $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(0), true, 0, 0, [Operand::cv(0)]))
+        expect(injectorCallArray($call, 'coerceArgsOperand', $intTarget, $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(0), true, 0, 0, [Operand::cv(0)]))
             ->toEqual([Operand::cv(0), null, 0]);
         $arrayTarget = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => 'array']);
-        expect($call('coerceArgsOperand', $arrayTarget, $handler, new ReflectionFunction('injectorReflectionIterable'), 0, Operand::cv(0), true, 0, 0, [Operand::cv(0)]))
+        expect(injectorCallArray($call, 'coerceArgsOperand', $arrayTarget, $handler, new ReflectionFunction('injectorReflectionIterable'), 0, Operand::cv(0), true, 0, 0, [Operand::cv(0)]))
             ->toEqual([Operand::cv(0), null, 0]);
 
-        expect($call('coerceCallbackInputs', $target, new MethodBody('injectorHelperCallbackWithLocal', null, 0, 0, []), [], 0, 0))
+        expect(injectorCallArray($call, 'coerceCallbackInputs', $target, new MethodBody('injectorHelperCallbackWithLocal', null, 0, 0, []), [], 0, 0))
             ->toEqual([[], [], 0]);
         $coercionTarget = new MethodBody('injectorHelperInt', null, 0, 0, [
             new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
@@ -371,7 +405,7 @@ describe('Injector', function (): void {
         $coercionHandler = new MethodBody('injectorHelperCoercedString', null, 0, 0, [
             new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
         ]);
-        $coercionPrelude = $call('coerceCallbackInputs', $coercionTarget, $coercionHandler, [0 => Operand::cv(0)], 0, 0);
+        $coercionPrelude = injectorCallArray($call, 'coerceCallbackInputs', $coercionTarget, $coercionHandler, [0 => Operand::cv(0)], 0, 0);
         expect($coercionPrelude[0])->toHaveCount(1)
             ->and($coercionPrelude[2])->toBe(1);
 
@@ -379,30 +413,30 @@ describe('Injector', function (): void {
         $arrayHandler = new MethodBody('injectorHelperCoercedArray', null, 0, 0, [
             new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
         ]);
-        expect($call('coerceCallbackInputs', $arrayTarget, $arrayHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
+        expect(injectorCallArray($call, 'coerceCallbackInputs', $arrayTarget, $arrayHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
 
         $iterableTarget = new MethodBody('injectorHelperInt', null, 0, 0, [], variableTypes: [0 => 'array']);
         $iterableHandler = new MethodBody('injectorHelperCoercedIterable', null, 0, 0, [
             new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
         ]);
-        expect($call('coerceCallbackInputs', $iterableTarget, $iterableHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(0);
+        expect(injectorCallArray($call, 'coerceCallbackInputs', $iterableTarget, $iterableHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(0);
 
         $numericTarget = new MethodBody('injectorHelperInt', null, 0, 0, [], variableTypes: [0 => 'float']);
         $numericHandler = new MethodBody('injectorHelperCoercedInt', null, 0, 0, [
             new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
         ]);
-        expect($call('coerceCallbackInputs', $numericTarget, $numericHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
+        expect(injectorCallArray($call, 'coerceCallbackInputs', $numericTarget, $numericHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
 
         $objectTarget = new MethodBody('injectorHelperInt', null, 0, 0, [], variableTypes: [0 => InjectorReflectionLeftValue::class]);
         $objectHandler = new MethodBody('injectorHelperCoercedStdClass', null, 0, 0, [
             new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
         ]);
-        expect($call('coerceCallbackInputs', $objectTarget, $objectHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(0);
+        expect(injectorCallArray($call, 'coerceCallbackInputs', $objectTarget, $objectHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(0);
 
         $unionHandler = new MethodBody('injectorHelperCoercedUnion', null, 0, 0, [
             new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
         ]);
-        expect($call('coerceCallbackInputs', $numericTarget, $unionHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
+        expect(injectorCallArray($call, 'coerceCallbackInputs', $numericTarget, $unionHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
     });
 
     it('folds callback comparisons only when both constants are compatible', function (): void {
@@ -1335,8 +1369,10 @@ describe('Injector', function (): void {
         public int $integer;
         public float $float;
         public bool $boolean;
+        /** @var array<int, mixed> */
         public array $array;
         public string $string;
+        /** @var mixed */
         public $untyped;
     }
 });

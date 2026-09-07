@@ -1018,6 +1018,9 @@ final class Matcher
                     } elseif ($init->operand1->kind === Operand::CONSTANT && is_string($init->operand1->value)) {
                         $name = $init->operand1->value;
                     }
+                    if (!is_string($name)) {
+                        return null;
+                    }
                     $type = (new ReflectionFunction($name))->getReturnType();
 
                     return $type instanceof \ReflectionNamedType ? $type->getName() : null;

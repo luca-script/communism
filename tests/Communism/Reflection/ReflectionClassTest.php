@@ -71,7 +71,9 @@ describe('ReflectionClass', function (): void {
         (new ReflectionClass(ReflectionClassMutableCoverageTarget::class))
             ->inject(ReflectionClassInjectMixin::class);
 
-        expect((new ReflectionClassMutableCoverageTarget())->injected())->toBe('injected');
+        $target = new ReflectionClassMutableCoverageTarget();
+        $method = new ReflectionMethod($target, 'injected');
+        expect($method->invoke($target))->toBe('injected');
     });
 
     it('temporarily removes finality and restores it after the callback', function (): void {

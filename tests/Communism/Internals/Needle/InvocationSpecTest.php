@@ -20,7 +20,10 @@ describe('InvocationSpec', function (): void {
 
     function invocationIntersection(InvocationIntersectionLeft&InvocationIntersectionRight $value): void {}
 
-    function invocationUntyped($value) {}
+    function invocationUntyped(mixed $value): mixed
+    {
+        return $value;
+    }
 
     it('parses function, member, static, and extended invocation specifications', function (): void {
         expect(InvocationSpec::parse('strlen'))

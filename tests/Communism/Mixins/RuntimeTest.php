@@ -7,6 +7,7 @@ use Communism\Mixin\Runtime;
 
 final class InvalidRuntimeManifest extends Manifest
 {
+    /** @return array<int, mixed> */
     public function getTransforms(): array
     {
         return [];

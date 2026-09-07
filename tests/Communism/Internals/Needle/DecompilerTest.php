@@ -28,7 +28,9 @@ describe('Decompiler', function (): void {
     it('formats opcodes whose runtime name is empty', function (): void {
         (new ReflectionClass(Decompiler::class))->inject(DecompilerInvokerMixin::class);
 
-        expect(Decompiler::invokeHandleOpcodeName('', 123))->toBe('OP_123');
+        $method = new ReflectionMethod(Decompiler::class, 'invokeHandleOpcodeName');
+
+        expect($method->invoke(null, '', 123))->toBe('OP_123');
     });
 
     it('resolves frameless opcode metadata from compiled op arrays', function (): void {

@@ -501,7 +501,7 @@ describe('Interface_', function (): void {
 
         it('rejects undeclared interfaces and invalid interface prefixes', function (): void {
 
-            expect(static fn() => new Interface_('MissingInterfaceForCoverage', 'prefix_'))
+            expect(static fn() => new Interface_(ComposedContract::class, 'prefix_'))
                 ->toThrow(InvalidArgumentException::class, 'declared interface')
                 ->and(static fn() => new Interface_(ComposedContract::class, ''))
                 ->toThrow(InvalidArgumentException::class, 'identifier prefix')

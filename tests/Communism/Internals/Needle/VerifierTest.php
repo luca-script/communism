@@ -70,6 +70,9 @@ describe('Verifier', function (): void {
                 $serialized,
             ));
             expect($operand)->toBeInstanceOf(Operand::class);
+            if (!$operand instanceof Operand) {
+                throw new LogicException('Expected an Operand.');
+            }
 
             return $operand;
         };

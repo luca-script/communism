@@ -33,7 +33,8 @@ describe('Runtime', function (): void {
     {
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return [ManifestRuntimeMixin::class];
         }
@@ -41,7 +42,8 @@ describe('Runtime', function (): void {
 
     final class ManifestDefaultsDefinition extends Manifest
     {
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return [];
         }
@@ -88,7 +90,8 @@ describe('Runtime', function (): void {
 
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return [];
         }
@@ -111,7 +114,8 @@ describe('Runtime', function (): void {
     {
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return ['MissingManifestRuntimeMixin'];
         }
@@ -131,7 +135,8 @@ describe('Runtime', function (): void {
 
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return ['MissingOptionalManifestMixin'];
         }
@@ -157,7 +162,8 @@ describe('Runtime', function (): void {
     {
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return [ManifestMissingTargetMixin::class];
         }
@@ -167,7 +173,8 @@ describe('Runtime', function (): void {
     {
         /** @return array<string, string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return ['mixin' => ManifestRuntimeMixin::class];
         }
@@ -177,7 +184,8 @@ describe('Runtime', function (): void {
     {
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return [ManifestUnannotatedTransform::class];
         }
@@ -204,7 +212,8 @@ describe('Runtime', function (): void {
 
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return [];
         }
@@ -267,7 +276,8 @@ describe('Runtime', function (): void {
     {
         /** @return list<string> */
         #[Override]
-        public function getTransforms(): array
+        /** @return array<int, mixed> */
+    public function getTransforms(): array
         {
             return [ManifestRuntimeAppliedSelectorMixin::class];
         }

@@ -24,6 +24,122 @@ use Communism\Mixin\Surrogate;
 use Communism\Mixin\Final_;
 
 describe('Zend', function (): void {
+    /** @return class-string */
+    function zendDuplicateFixture(string $name): string
+    {
+        if (!class_exists($name)) {
+            throw new LogicException('Fixture was not evaluated.');
+        }
+        return $name;
+    }
+
+    eval(<<<'PHP'
+        #[\Communism\Mixin\Mixin(ZendIntrinsicStaticTarget::class)]
+        final class ZendDuplicateIntrinsicMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\Intrinsic]
+            #[\Communism\Mixin\Intrinsic]
+            public function duplicate(): string
+            {
+                return 'duplicate';
+            }
+        }
+
+        #[\Communism\Mixin\Mixin(ZendSoftMissingTarget::class)]
+        final class ZendDuplicateSoftOverrideMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\SoftOverride]
+            #[\Communism\Mixin\SoftOverride]
+            public function duplicate(): string
+            {
+                return 'duplicate';
+            }
+        }
+
+        #[\Communism\Mixin\Mixin(ZendDuplicateSurrogateTarget::class)]
+        final class ZendDuplicateSurrogateMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\Surrogate]
+            #[\Communism\Mixin\Surrogate]
+            public function handlerSurrogate(): void {}
+        }
+
+        #[\Communism\Mixin\Mixin(ZendEdgeTarget::class)]
+        final class ZendDuplicateAccessorMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\Accessor]
+            #[\Communism\Mixin\Accessor]
+            public function duplicate(): string
+            {
+                return 'duplicate';
+            }
+        }
+
+        #[\Communism\Mixin\Mixin(ZendEdgeTarget::class)]
+        final class ZendDuplicateFinalMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\Final_]
+            #[\Communism\Mixin\Final_]
+            public function duplicate(): string
+            {
+                return 'duplicate';
+            }
+        }
+
+        #[\Communism\Mixin\Mixin(ZendEdgeTarget::class)]
+        final class ZendDuplicateOverwriteMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\Overwrite]
+            #[\Communism\Mixin\Overwrite]
+            public function duplicate(): string
+            {
+                return 'duplicate';
+            }
+        }
+
+        #[\Communism\Mixin\Mixin(ZendEdgeTarget::class)]
+        final class ZendDuplicateShadowMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\Shadow]
+            #[\Communism\Mixin\Shadow]
+            public function duplicate(): string
+            {
+                return 'duplicate';
+            }
+        }
+
+        final class ZendDuplicateGroupTarget
+        {
+            #[\Communism\Mixin\Group('one')]
+            #[\Communism\Mixin\Group('two')]
+            public function grouped(): void {}
+        }
+
+        #[\Communism\Mixin\Mixin(ZendDuplicatePropertyTarget::class)]
+        final class ZendDuplicatePropertyMixin
+        {
+            private function __construct() {}
+
+            #[\Communism\Mixin\Shadow]
+            #[\Communism\Mixin\Final_]
+            #[\Communism\Mixin\Final_]
+            public string $value = 'value';
+        }
+    PHP);
     covers([Group::class, Zend::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     class ZendEdgeTarget
@@ -78,7 +194,7 @@ describe('Zend', function (): void {
 
     final class ZendInvalidParameterMixin
     {
-        private function __construct(string $value) {}
+        private function __construct(string $value) { if ($value === 'never') { throw new LogicException(); } }
     }
 
     final class ZendEdgeTypedHandlers
@@ -100,6 +216,10 @@ describe('Zend', function (): void {
             return $value;
         }
 
+        /**
+         * @param array<int, mixed> $value
+         * @return array<int, mixed>
+         */
         #[Coerce]
         public function coercedArray(array $value): array
         {
@@ -121,18 +241,6 @@ describe('Zend', function (): void {
         }
     }
 
-    #[Mixin(ZendIntrinsicStaticTarget::class)]
-    final class ZendDuplicateIntrinsicMixin
-    {
-        private function __construct() {}
-
-        #[Intrinsic]
-        #[Intrinsic]
-        public function duplicate(): string
-        {
-            return 'duplicate';
-        }
-    }
 
     final class ZendCombinedAnnotationTarget {}
 
@@ -163,18 +271,6 @@ describe('Zend', function (): void {
         }
     }
 
-    #[Mixin(ZendSoftMissingTarget::class)]
-    final class ZendDuplicateSoftOverrideMixin
-    {
-        private function __construct() {}
-
-        #[SoftOverride]
-        #[SoftOverride]
-        public function duplicate(): string
-        {
-            return 'duplicate';
-        }
-    }
 
     class ZendSoftInheritedBase
     {
@@ -192,9 +288,15 @@ describe('Zend', function (): void {
         private function __construct() {}
 
         #[SoftOverride]
+        /** @phpstan-used */
         private function inherited(): string
         {
             return 'private';
+        }
+
+        public static function inheritedForAnalysis(): string
+        {
+            return (new self())->inherited();
         }
     }
 
@@ -284,90 +386,17 @@ describe('Zend', function (): void {
 
     final class ZendDuplicateSurrogateTarget {}
 
-    #[Mixin(ZendDuplicateSurrogateTarget::class)]
-    final class ZendDuplicateSurrogateMixin
-    {
-        private function __construct() {}
 
-        #[Surrogate]
-        #[Surrogate]
-        public function handlerSurrogate(): void {}
-    }
 
-    #[Mixin(ZendEdgeTarget::class)]
-    final class ZendDuplicateAccessorMixin
-    {
-        private function __construct() {}
 
-        #[Accessor]
-        #[Accessor]
-        public function duplicate(): string
-        {
-            return 'duplicate';
-        }
-    }
 
-    #[Mixin(ZendEdgeTarget::class)]
-    final class ZendDuplicateFinalMixin
-    {
-        private function __construct() {}
 
-        #[Final_]
-        #[Final_]
-        public function duplicate(): string
-        {
-            return 'duplicate';
-        }
-    }
-
-    #[Mixin(ZendEdgeTarget::class)]
-    final class ZendDuplicateOverwriteMixin
-    {
-        private function __construct() {}
-
-        #[Overwrite]
-        #[Overwrite]
-        public function duplicate(): string
-        {
-            return 'duplicate';
-        }
-    }
-
-    #[Mixin(ZendEdgeTarget::class)]
-    final class ZendDuplicateShadowMixin
-    {
-        private function __construct() {}
-
-        #[Shadow]
-        #[Shadow]
-        public function duplicate(): string
-        {
-            return 'duplicate';
-        }
-    }
-
-    final class ZendDuplicateGroupTarget
-    {
-        #[Group('one')]
-        #[Group('two')]
-        public function grouped(): void {}
-    }
 
     final class ZendDuplicatePropertyTarget
     {
         public string $value = 'value';
     }
 
-    #[Mixin(ZendDuplicatePropertyTarget::class)]
-    final class ZendDuplicatePropertyMixin
-    {
-        private function __construct() {}
-
-        #[Shadow]
-        #[Final_]
-        #[Final_]
-        public string $value = 'value';
-    }
 
     it('validates generated accessor and invoker targets', function (): void {
         $invoke = static function (string $name, mixed ...$arguments): mixed {
@@ -532,13 +561,13 @@ describe('Zend', function (): void {
 
         expect(static fn() => Zend::injectMixinMethods(ZendIntrinsicStaticTarget::class, ZendIntrinsicStaticMixin::class))
             ->toThrow(InvalidArgumentException::class, 'cannot be static')
-            ->and(static fn() => Zend::injectMixinMethods(ZendIntrinsicStaticTarget::class, ZendDuplicateIntrinsicMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendIntrinsicStaticTarget::class, zendDuplicateFixture('ZendDuplicateIntrinsicMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Intrinsic]')
             ->and(static fn() => Zend::injectMixinMethods(ZendCombinedAnnotationTarget::class, ZendCombinedAnnotationMixin::class))
             ->toThrow(InvalidArgumentException::class, 'Intrinsic')
             ->and(static fn() => Zend::injectMixinMethods(ZendSoftMissingTarget::class, ZendSoftMissingMixin::class))
             ->toThrow(InvalidArgumentException::class, 'no target method')
-            ->and(static fn() => Zend::injectMixinMethods(ZendSoftMissingTarget::class, ZendDuplicateSoftOverrideMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendSoftMissingTarget::class, zendDuplicateFixture('ZendDuplicateSoftOverrideMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[SoftOverride]')
             ->and(static fn() => Zend::injectMixinMethods(ZendSoftInheritedTarget::class, ZendSoftPrivateMixin::class))
             ->toThrow(InvalidArgumentException::class, 'cannot be private')
@@ -550,19 +579,19 @@ describe('Zend', function (): void {
             ->toThrow(InvalidArgumentException::class, 'both be static or instance')
             ->and(static fn() => $invoke('interfaceMethodMappings', new ReflectionClass(ZendDuplicateInterfaceMixin::class)))
             ->toThrow(InvalidArgumentException::class, 'more than one')
-            ->and(static fn() => Zend::injectMixinMethods(ZendDuplicateSurrogateTarget::class, ZendDuplicateSurrogateMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendDuplicateSurrogateTarget::class, zendDuplicateFixture('ZendDuplicateSurrogateMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Surrogate]')
-            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, ZendDuplicateAccessorMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, zendDuplicateFixture('ZendDuplicateAccessorMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Accessor]')
-            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, ZendDuplicateFinalMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, zendDuplicateFixture('ZendDuplicateFinalMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Final]')
-            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, ZendDuplicateOverwriteMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, zendDuplicateFixture('ZendDuplicateOverwriteMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Overwrite]')
-            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, ZendDuplicateShadowMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendEdgeTarget::class, zendDuplicateFixture('ZendDuplicateShadowMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Shadow]')
-            ->and(static fn() => $invoke('groupForMethod', new ReflectionMethod(ZendDuplicateGroupTarget::class, 'grouped')))
+            ->and(static fn() => $invoke('groupForMethod', new ReflectionMethod(zendDuplicateFixture('ZendDuplicateGroupTarget'), 'grouped')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Group]')
-            ->and(static fn() => Zend::injectMixinMethods(ZendDuplicatePropertyTarget::class, ZendDuplicatePropertyMixin::class))
+            ->and(static fn() => Zend::injectMixinMethods(ZendDuplicatePropertyTarget::class, zendDuplicateFixture('ZendDuplicatePropertyMixin')))
             ->toThrow(InvalidArgumentException::class, 'may have only one #[Final]')
             ->and(static fn() => $invoke('validateOverwriteSignature', ZendParameterTarget::class, 'convert', new ReflectionMethod(ZendParameterSource::class, 'convert'), ZendParameterSource::class))
             ->toThrow(InvalidArgumentException::class, 'incompatible signature');
