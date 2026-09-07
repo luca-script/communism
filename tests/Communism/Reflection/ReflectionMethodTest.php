@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Communism\Reflect\ReflectionMethod;
+use Zendful\Zendful;
 
 describe('ReflectionMethod', function (): void {
     covers(ReflectionMethod::class);
@@ -22,6 +23,27 @@ describe('ReflectionMethod', function (): void {
         public static function staticMethod(): string
         {
             return 'static';
+        }
+    }
+
+    final class ReflectionMethodSwapTarget
+    {
+        public function first(): string
+        {
+            return 'first';
+        }
+
+        public function second(): string
+        {
+            return 'second';
+        }
+    }
+
+    final class ReflectionMethodFallbackTarget
+    {
+        public function run(): string
+        {
+            return 'run';
         }
     }
 
@@ -75,5 +97,24 @@ describe('ReflectionMethod', function (): void {
 
         $method->setStatic();
         expect((new \ReflectionMethod(ReflectionMethodCoverageTarget::class, 'staticMethod'))->isStatic())->toBeTrue();
+    });
+
+    it('swaps the implementations of two reflected methods', function (): void {
+        $first = new ReflectionMethod(ReflectionMethodSwapTarget::class, 'first');
+        $second = new ReflectionMethod(ReflectionMethodSwapTarget::class, 'second');
+
+        $first->swap($second);
+
+        $target = new ReflectionMethodSwapTarget();
+        expect($target->first())->toBe('second')
+            ->and($target->second())->toBe('first');
+    });
+
+    it('falls back when runtime method metadata disappears', function (): void {
+        $wrapper = new ReflectionMethod(ReflectionMethodFallbackTarget::class, 'run');
+        Zendful::method(ReflectionMethodFallbackTarget::class, 'run')->renameTo('renamed');
+
+        expect($wrapper->withVisibility(\Communism\Reflect\Visibility::Private, static fn(): string => 'fallback'))
+            ->toBe('fallback');
     });
 });

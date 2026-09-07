@@ -9,7 +9,6 @@ describe('Natives', function (): void {
 
     it('exposes validated fallback globals and ABI layout selection', function (): void {
         $supportsPhp86 = new ReflectionMethod(Natives::class, 'supportsPhp86');
-        $supportsPhp86->setAccessible(true);
 
         expect($supportsPhp86->invoke(null))->toBeBool()
             ->and(Natives::ffi())->toBeInstanceOf(FFI::class)
@@ -19,8 +18,6 @@ describe('Natives', function (): void {
     it('selects platform ABI conventions and fallback library names', function (): void {
         $callingConvention = new ReflectionMethod(Natives::class, 'callingConvention');
         $libraries = new ReflectionMethod(Natives::class, 'fallbackLibraries');
-        $callingConvention->setAccessible(true);
-        $libraries->setAccessible(true);
 
         expect($callingConvention->invoke(null, 'Linux', 4))->toBe('__attribute__((fastcall))')
             ->and($callingConvention->invoke(null, 'Linux', 8))->toBe('')

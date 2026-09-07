@@ -8,70 +8,74 @@ use Communism\Mixin\Mixin;
 use Communism\Mixin\TargetMethods;
 use Communism\Reflect\ReflectionClass;
 
-#[Mixin(AtomicInjectionTarget::class)]
-final class AtomicInjectionTrait
-{
-    private function __construct() {}
-    #[Inject('first', new At('RETURN'))]
-    public function firstInjector(): void {}
+describe('Inject', function (): void {
+    covers([Inject::class, TargetMethods::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
-    #[Inject('second', new At('INVOKE', 'missingAtomicCall'))]
-    public function secondInjector(): void {}
-}
-
-
-final class AtomicInjectionTarget
-{
-    public function first(): int
+    #[Mixin(AtomicInjectionTarget::class)]
+    final class AtomicInjectionTrait
     {
-        return 1;
+        private function __construct() {}
+        #[Inject('first', new At('RETURN'))]
+        public function firstInjector(): void {}
+
+        #[Inject('second', new At('INVOKE', 'missingAtomicCall'))]
+        public function secondInjector(): void {}
     }
 
-    public function second(): void {}
-}
 
-it('preflights every selected injection before changing the target', function (): void {
-    expect(function (): void {
-        (new ReflectionClass(AtomicInjectionTarget::class))->inject(AtomicInjectionTrait::class);
-    })
-        ->toThrow(InvalidArgumentException::class, 'Injection point did not match');
+    final class AtomicInjectionTarget
+    {
+        public function first(): int
+        {
+            return 1;
+        }
 
-    expect(in_array('firstInjector', get_class_methods(AtomicInjectionTarget::class), true))->toBeFalse();
-    expect(in_array('secondInjector', get_class_methods(AtomicInjectionTarget::class), true))->toBeFalse();
-});
+        public function second(): void {}
+    }
 
-it('rejects malformed multi-target Inject declarations', function (): void {
-    expect(static fn() => new Inject([], new At('HEAD')))
-        ->toThrow(InvalidArgumentException::class, 'target method')
-        ->and(static fn() => new Inject(['first' => 'value'], new At('HEAD')))
-        ->toThrow(InvalidArgumentException::class, 'target method')
-        ->and(static fn() => new Inject(['first', ''], new At('HEAD')))
-        ->toThrow(InvalidArgumentException::class, 'target method');
-});
+    it('preflights every selected injection before changing the target', function (): void {
+        expect(function (): void {
+            (new ReflectionClass(AtomicInjectionTarget::class))->inject(AtomicInjectionTrait::class);
+        })
+            ->toThrow(InvalidArgumentException::class, 'Injection point did not match');
 
-describe('TargetMethods', function (): void {
-    covers([TargetMethods::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
-
-    it('normalizes valid injection target method lists', function (): void {
-
-        expect(TargetMethods::normalize('run'))->toBe(['run'])
-            ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second'])
-            ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second']);
-
-        expect(static fn() => TargetMethods::normalize([]))->toThrow(InvalidArgumentException::class)
-            ->and(static fn() => TargetMethods::normalize(['first' => 'run']))->toThrow(InvalidArgumentException::class)
-            ->and(static fn() => TargetMethods::normalize(['']))->toThrow(InvalidArgumentException::class);
+        expect(in_array('firstInjector', get_class_methods(AtomicInjectionTarget::class), true))->toBeFalse();
+        expect(in_array('secondInjector', get_class_methods(AtomicInjectionTarget::class), true))->toBeFalse();
     });
-});
 
-describe('Inject', function (): void {
-    covers([Inject::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+    it('rejects malformed multi-target Inject declarations', function (): void {
+        expect(static fn() => new Inject([], new At('HEAD')))
+            ->toThrow(InvalidArgumentException::class, 'target method')
+            ->and(static fn() => new Inject(['first' => 'value'], new At('HEAD')))
+            ->toThrow(InvalidArgumentException::class, 'target method')
+            ->and(static fn() => new Inject(['first', ''], new At('HEAD')))
+            ->toThrow(InvalidArgumentException::class, 'target method');
+    });
 
-    it('normalizes Inject targets and rejects invalid target values', function (): void {
+    describe('TargetMethods', function (): void {
+        covers([TargetMethods::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
-        $inject = new Inject(['first', 'second'], new At('HEAD'));
-        expect($inject->method)->toBe('first')->and($inject->targets)->toBe(['first', 'second']);
-        expect(static fn() => new Inject(['first', 42], new At('HEAD')))
-            ->toThrow(InvalidArgumentException::class);
+        it('normalizes valid injection target method lists', function (): void {
+
+            expect(TargetMethods::normalize('run'))->toBe(['run'])
+                ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second'])
+                ->and(TargetMethods::normalize(['first', 'second']))->toBe(['first', 'second']);
+
+            expect(static fn() => TargetMethods::normalize([]))->toThrow(InvalidArgumentException::class)
+                ->and(static fn() => TargetMethods::normalize(['first' => 'run']))->toThrow(InvalidArgumentException::class)
+                ->and(static fn() => TargetMethods::normalize(['']))->toThrow(InvalidArgumentException::class);
+        });
+    });
+
+    describe('Inject', function (): void {
+        covers([Inject::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+
+        it('normalizes Inject targets and rejects invalid target values', function (): void {
+
+            $inject = new Inject(['first', 'second'], new At('HEAD'));
+            expect($inject->method)->toBe('first')->and($inject->targets)->toBe(['first', 'second']);
+            expect(static fn() => new Inject(['first', 42], new At('HEAD')))
+                ->toThrow(InvalidArgumentException::class);
+        });
     });
 });

@@ -17,6 +17,9 @@ use Communism\Mixin\At;
 use Communism\Mixin\Args;
 use Communism\Mixin\Inject;
 use Communism\Mixin\LocalCapture;
+use Communism\Mixin\Local;
+use Communism\Mixin\Parameter;
+use Communism\Mixin\Slice;
 
 describe('Injector', function (): void {
     covers(Injector::class);
@@ -41,6 +44,47 @@ describe('Injector', function (): void {
         return $value;
     }
 
+    #[Coerce]
+    function injectorHelperCoercedString(string $value): string
+    {
+        return $value;
+    }
+
+    #[Coerce]
+    function injectorHelperCoercedArray(array $value): array
+    {
+        return $value;
+    }
+
+    #[Coerce]
+    function injectorHelperCoercedIterable(iterable $value): iterable
+    {
+        return $value;
+    }
+
+    #[Coerce]
+    function injectorHelperCoercedNoReturn(mixed $value)
+    {
+        return $value;
+    }
+
+    #[Coerce]
+    function injectorHelperCoercedInt(int $value): int
+    {
+        return $value;
+    }
+
+    #[Coerce]
+    function injectorHelperCoercedStdClass(stdClass $value): stdClass
+    {
+        return $value;
+    }
+
+    #[Coerce]
+    function injectorHelperCoercedUnion(bool|stdClass|string $value): void {}
+
+    function injectorHelperVariadicInt(int ...$values): void {}
+
     function injectorHelperNullable(bool $value = false): ?string
     {
         return $value ? 'value' : null;
@@ -57,6 +101,24 @@ describe('Injector', function (): void {
 
     function injectorHelperCallbackWithOtherLocal(CallbackInfo $info, string $other): void {}
 
+    function injectorHelperCallbackBoth(CallbackInfo $info, #[Local] #[Parameter(name: 'value')] string $value): void {}
+
+    function injectorHelperCallbackExplicitLocal(CallbackInfo $info, #[Local(name: 'value')] string $value): void {}
+
+    function injectorHelperCallbackMissingLocal(CallbackInfo $info, #[Local(name: 'missing')] string $value): void {}
+
+    function injectorHelperCallbackMissingParameter(CallbackInfo $info, #[Parameter(ordinal: 99)] string $value): void {}
+
+    function injectorHelperCallbackMissingNamedParameter(CallbackInfo $info, #[Parameter(name: 'missing')] string $value): void {}
+
+    function injectorHelperCallbackNamedValueParameter(CallbackInfo $info, #[Parameter(name: 'value')] string $renamed): void {}
+
+    function injectorHelperCallbackExplicitOtherLocal(CallbackInfo $info, #[Local(name: 'other')] string $value): void {}
+
+    function injectorHelperCallbackWithPositionalLocal(CallbackInfo $info, string $value, string $other): void {}
+
+    function injectorHelperDuplicateLocal(CallbackInfo $info, #[Local] #[Local] string $value): void {}
+
     /** @param CallbackInfoReturnable<mixed> $info */
     function injectorHelperCallbackWithReturnable(CallbackInfoReturnable $info): void {}
 
@@ -72,6 +134,8 @@ describe('Injector', function (): void {
     function injectorCoercedFloatParameter(float $value): void {}
 
     function injectorUntypedParameter(mixed $value): void {}
+
+    function injectorNoTypeParameter($value): void {}
 
     function injectorOtherNamedParameter(string $other): void {}
 
@@ -101,10 +165,45 @@ describe('Injector', function (): void {
         return $value;
     }
 
+    interface InjectorReflectionLeft {}
+    interface InjectorReflectionRight {}
+
+    final class InjectorReflectionValue implements InjectorReflectionLeft, InjectorReflectionRight {}
+
+    final class InjectorReflectionLeftValue implements InjectorReflectionLeft {}
+
+    function injectorReflectionLeftValue(): InjectorReflectionLeftValue
+    {
+        return new InjectorReflectionLeftValue();
+    }
+
+    function injectorReflectionUnion(int|string $value): int|float
+    {
+        return is_int($value) ? $value : strlen($value);
+    }
+
+    function injectorReflectionIntersection(InjectorReflectionLeft&InjectorReflectionRight $value): void {}
+
+    function injectorReflectionValue(): InjectorReflectionValue
+    {
+        return new InjectorReflectionValue();
+    }
+
+    function injectorReflectionCoercionUnion(): float|bool|string|stdClass
+    {
+        return 1.0;
+    }
+
+    function injectorReflectionIterable(iterable $value): void {}
+
+    function injectorLiteralArray(): array
+    {
+        return ['value'];
+    }
+
     it('covers Injector type compatibility and reflection helpers', function (): void {
         $call = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(Injector::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -132,10 +231,396 @@ describe('Injector', function (): void {
             ->toBeNull();
     });
 
+    it('describes bounded and unbounded injection slices', function (): void {
+        $method = new ReflectionMethod(Injector::class, 'sliceDescription');
+
+        expect($method->invoke(null, new Slice()))->toBe('HEAD..TAIL')
+            ->and($method->invoke(null, new Slice(new At('HEAD'))))->toBe('HEAD..TAIL')
+            ->and($method->invoke(null, new Slice(null, new At('RETURN'))))->toBe('HEAD..RETURN');
+    });
+
+    it('resolves optional handler names and matched instruction names', function (): void {
+        $handlerName = new ReflectionMethod(Injector::class, 'handlerName');
+        $resolvedInstruction = new ReflectionMethod(Injector::class, 'resolvedInstruction');
+        $inject = new Inject('run', new At('HEAD'));
+        $body = new MethodBody('target', null, 0, 0, [
+            new Instruction(0, 'RETURN', Operand::unused(), Operand::unused(), Operand::unused()),
+        ]);
+
+        expect($handlerName->invoke(null, null, $inject))->toBeNull()
+            ->and($handlerName->invoke(null, static fn(): string => 'handler', $inject))->toBe('handler')
+            ->and($handlerName->invoke(null, static fn(): ?string => null, $inject))->toBeNull()
+            ->and($resolvedInstruction->invoke(null, $body, []))->toBeNull()
+            ->and($resolvedInstruction->invoke(null, $body, [new MatchResult(0, 0, 'return')]))->toBe('RETURN');
+    });
+
+    it('evaluates reflected union and intersection type compatibility', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $unionReflection = new ReflectionFunction('injectorReflectionUnion');
+        $unionParameter = $unionReflection->getParameters()[0]->getType();
+        $unionReturn = $unionReflection->getReturnType();
+        $intersection = (new ReflectionFunction('injectorReflectionIntersection'))
+            ->getParameters()[0]
+            ->getType();
+        $valueReturn = (new ReflectionFunction('injectorReflectionValue'))->getReturnType();
+        $leftValueReturn = (new ReflectionFunction('injectorReflectionLeftValue'))->getReturnType();
+        $coercionUnion = (new ReflectionFunction('injectorReflectionCoercionUnion'))->getReturnType();
+        $arrayReturn = (new ReflectionFunction('injectorLiteralArray'))->getReturnType();
+        $iterable = (new ReflectionFunction('injectorReflectionIterable'))->getParameters()[0]->getType();
+        $integer = (new ReflectionFunction('injectorHelperInt'))->getParameters()[0]->getType();
+        $string = (new ReflectionFunction('injectorHelperString'))->getParameters()[0]->getType();
+
+        expect($call('namedTypes', null))->toBe([])
+            ->and($call('namedTypes', $integer))->toBe(['int'])
+            ->and($call('namedTypes', $unionParameter))->toBe(['string', 'int'])
+            ->and($call('reflectionTypeAccepts', $unionParameter, $integer))->toBeTrue()
+            ->and($call('reflectionTypeAccepts', $integer, $unionParameter))->toBeFalse()
+            ->and($call('reflectionTypeAccepts', $intersection, $valueReturn))->toBeTrue()
+            ->and($call('reflectionTypeAccepts', $intersection, $leftValueReturn))->toBeFalse()
+            ->and($call('reflectionTypeAccepts', $call('reflection', 'injectorHelperObject')->getReturnType(), $intersection))->toBeFalse()
+            ->and($call('reflectionTypeCanCoerce', $unionReturn, $integer))->toBeTrue()
+            ->and($call('reflectionTypeCanCoerce', $integer, $string))->toBeFalse()
+            ->and($call('reflectionTypeCanCoerce', $intersection, $intersection))->toBeFalse()
+            ->and($call('reflectionTypeAcceptsName', $unionParameter, 'int'))->toBeTrue()
+            ->and($call('reflectionTypeAcceptsName', $unionParameter, 'bool'))->toBeFalse()
+            ->and($call('reflectionTypeAcceptsName', $intersection, InjectorReflectionValue::class))->toBeTrue()
+            ->and($call('reflectionTypeAcceptsName', $intersection, InjectorReflectionLeftValue::class))->toBeFalse()
+            ->and($call('reflectionTypeCanCoerceName', $unionParameter, 'float'))->toBeTrue()
+            ->and($call('reflectionTypeCanCoerceName', $unionParameter, 'array'))->toBeFalse()
+            ->and($call('reflectionTypeCanCoerceName', $intersection, 'int'))->toBeFalse()
+            ->and($call('reflectionCoercionCastType', $string, $integer))->toBe(6)
+            ->and($call('reflectionCoercionCastType', $integer, $integer))->toBeNull()
+            ->and($call('reflectionCoercionCastType', $coercionUnion, $integer))->toBe(5)
+            ->and($call('namedCoercionCastType', 'string', $integer))->toBe(6)
+            ->and($call('namedCoercionCastType', 'bool', $string))->toBe(3)
+            ->and($call('namedCoercionCastType', 'int', $call('reflection', 'injectorHelperFloat')->getParameters()[0]->getType()))->toBe(4)
+            ->and($call('namedCoercionCastType', 'float', $integer))->toBe(5)
+            ->and($call('namedCoercionCastType', 'array', $iterable))->toBe(7)
+            ->and($call('namedCoercionCastType', 'stdClass', $integer))->toBeNull()
+            ->and($call('namedCoercionCastType', 'stdClass&InjectorReflectionLeft|bool', $integer))->toBe(3)
+            ->and($call('namedCoercionCastType', 'stdClass|bool', $integer))->toBe(3)
+            ->and($call('namedCoercionCastType', 'float|bool|string|stdClass', $integer))->toBe(5)
+            ->and($call('namedCoercionCastType', null, $integer))->toBeNull()
+            ->and($call('namedCoercionCastType', 'stdClass|array', $integer))->toBeNull()
+            ->and($call('namedCoercionCastType', 'iterable', $arrayReturn))->toBeNull()
+            ->and($call('namedCoercionCastType', 'stdClass&InjectorReflectionLeft|array', $integer))->toBeNull()
+            ->and($call('reflectionCoercionCastType', $iterable, $arrayReturn))->toBeNull()
+            ->and($call('reflectionCoercionCastType', $coercionUnion, $call('reflection', 'injectorHelperObject')->getReturnType()))->toBeNull();
+    });
+
+    it('validates and coerces virtual argument operands by reflected parameter type', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $handler = new MethodBody('injectorHelperString', null, 0, 0, []);
+
+        expect($call('validateArgsValue', null, 0, Operand::constant(1, 0)))->toBeInstanceOf(Operand::class)
+            ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(1, 0)))->toEqual(Operand::constant(1, 0))
+            ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(2.5, 0), true)->value)->toBe(2)
+            ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperFloat'), 0, Operand::constant(2, 0), true)->value)->toBe(2.0)
+            ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperBool'), 0, Operand::constant(true, 0)))->toEqual(Operand::constant(true, 0))
+            ->and($call('validateArgsValue', new ReflectionFunction('injectorHelperString'), 0, Operand::constant('value', 0)))->toEqual(Operand::constant('value', 0))
+            ->and($call('validateArgsValue', new ReflectionFunction('injectorNoTypeParameter'), 0, Operand::constant([], 0)))->toEqual(Operand::constant([], 0));
+        expect(static fn() => $call('validateArgsValue', new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(new stdClass(), 0)))
+            ->toThrow(InvalidArgumentException::class, 'provides stdClass');
+
+        expect(static fn() => $call('validateArgsValue', new ReflectionFunction('injectorHelperInt'), 0, Operand::constant('wrong', 0)))
+            ->toThrow(InvalidArgumentException::class, 'requires int');
+
+        foreach ([
+            'injectorHelperBool' => 'int',
+            'injectorHelperFloat' => 'int',
+            'injectorHelperInt' => 'float',
+            'injectorHelperString' => 'int',
+        ] as $function => $actualType) {
+            $target = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => $actualType]);
+            $cv = Operand::cv(0);
+            $result = $call('coerceArgsOperand', $target, $handler, new ReflectionFunction($function), 0, $cv, true, 0, 0, [$cv]);
+            expect($result[1])->toBeInstanceOf(Instruction::class)
+                ->and($result[2])->toBe(1);
+        }
+
+        $target = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => 'string']);
+        $cv = Operand::cv(0);
+        expect($call('coerceArgsOperand', $target, $handler, null, 0, $cv, true, 0, 0, [$cv]))
+            ->toEqual([$cv, null, 0])
+            ->and($call('coerceArgsOperand', $target, $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::constant(1, 0), true, 0, 0, []))
+            ->toEqual([Operand::constant(1, 0), null, 0]);
+
+        $variadic = new ReflectionFunction('injectorHelperVariadicInt');
+        expect($call('coerceArgsOperand', $target, $handler, $variadic, 2, $cv, true, 0, 0, [$cv]))
+            ->toBeArray();
+        expect($call('coerceArgsOperand', new MethodBody('argument-target', null, 0, 0, [], variableTypes: [9 => 'object']), $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(9), true, 0, 0, []))
+            ->toEqual([Operand::cv(9), null, 0]);
+        expect($call('coerceArgsOperand', new MethodBody('argument-target', null, 0, 0, []), $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(9), true, 0, 0, []))
+            ->toEqual([Operand::cv(9), null, 0]);
+        $intTarget = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => 'int']);
+        expect($call('coerceArgsOperand', $intTarget, $handler, new ReflectionFunction('injectorHelperInt'), 0, Operand::cv(0), true, 0, 0, [Operand::cv(0)]))
+            ->toEqual([Operand::cv(0), null, 0]);
+        $arrayTarget = new MethodBody('argument-target', null, 0, 0, [], variableTypes: [0 => 'array']);
+        expect($call('coerceArgsOperand', $arrayTarget, $handler, new ReflectionFunction('injectorReflectionIterable'), 0, Operand::cv(0), true, 0, 0, [Operand::cv(0)]))
+            ->toEqual([Operand::cv(0), null, 0]);
+
+        expect($call('coerceCallbackInputs', $target, new MethodBody('injectorHelperCallbackWithLocal', null, 0, 0, []), [], 0, 0))
+            ->toEqual([[], [], 0]);
+        $coercionTarget = new MethodBody('injectorHelperInt', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+        ], variableTypes: [0 => 'int']);
+        $coercionHandler = new MethodBody('injectorHelperCoercedString', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+        ]);
+        $coercionPrelude = $call('coerceCallbackInputs', $coercionTarget, $coercionHandler, [0 => Operand::cv(0)], 0, 0);
+        expect($coercionPrelude[0])->toHaveCount(1)
+            ->and($coercionPrelude[2])->toBe(1);
+
+        $arrayTarget = new MethodBody('injectorHelperInt', null, 0, 0, [], variableTypes: [0 => 'iterable']);
+        $arrayHandler = new MethodBody('injectorHelperCoercedArray', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+        ]);
+        expect($call('coerceCallbackInputs', $arrayTarget, $arrayHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
+
+        $iterableTarget = new MethodBody('injectorHelperInt', null, 0, 0, [], variableTypes: [0 => 'array']);
+        $iterableHandler = new MethodBody('injectorHelperCoercedIterable', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+        ]);
+        expect($call('coerceCallbackInputs', $iterableTarget, $iterableHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(0);
+
+        $numericTarget = new MethodBody('injectorHelperInt', null, 0, 0, [], variableTypes: [0 => 'float']);
+        $numericHandler = new MethodBody('injectorHelperCoercedInt', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+        ]);
+        expect($call('coerceCallbackInputs', $numericTarget, $numericHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
+
+        $objectTarget = new MethodBody('injectorHelperInt', null, 0, 0, [], variableTypes: [0 => InjectorReflectionLeftValue::class]);
+        $objectHandler = new MethodBody('injectorHelperCoercedStdClass', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+        ]);
+        expect($call('coerceCallbackInputs', $objectTarget, $objectHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(0);
+
+        $unionHandler = new MethodBody('injectorHelperCoercedUnion', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+        ]);
+        expect($call('coerceCallbackInputs', $numericTarget, $unionHandler, [0 => Operand::cv(0)], 0, 0)[2])->toBe(1);
+    });
+
+    it('folds callback comparisons only when both constants are compatible', function (): void {
+        $method = new ReflectionMethod(Injector::class, 'foldCallbackComparison');
+        $instruction = static function (string $name, mixed $left, mixed $right): Instruction {
+            return new Instruction(
+                0,
+                $name,
+                Operand::unused(),
+                Operand::constant($left, 0),
+                Operand::constant($right, 0),
+            );
+        };
+
+        expect($method->invoke(null, $instruction('IS_EQUAL', 1, '1')))->toBeNull()
+            ->and($method->invoke(null, $instruction('IS_NOT_EQUAL', 1, 2)))->toBeTrue()
+            ->and($method->invoke(null, $instruction('IS_IDENTICAL', 1, 1)))->toBeTrue()
+            ->and($method->invoke(null, $instruction('IS_NOT_IDENTICAL', 1, 1)))->toBeFalse();
+    });
+
+    it('handles field return coercion when reflection metadata is unavailable', function (): void {
+        $method = new ReflectionMethod(Injector::class, 'coerceReplacementReturn');
+        $return = new Instruction(0, 'RETURN', Operand::constant('value', 0), Operand::unused(), Operand::unused());
+        $handler = new MethodBody('injectorHelperString', null, 0, 0, []);
+        $missingClass = new MethodBody('MissingInjectorClass::method', null, 0, 0, [
+            new Instruction(0, 'FETCH_OBJ_R', Operand::unused(), Operand::unused(), Operand::constant('value', 0)),
+        ]);
+        $missingProperty = new MethodBody(InjectorHelperCoverageTarget::class . '::method', null, 0, 0, [
+            new Instruction(0, 'FETCH_OBJ_R', Operand::unused(), Operand::unused(), Operand::constant('missing', 0)),
+        ]);
+
+        expect($method->invoke(null, $missingClass, $handler, new MatchResult(0, 0, 'field', fieldMode: 'read'), [], $return, 0, 0, 0))
+            ->toBe([[], $return, 0])
+            ->and($method->invoke(null, $missingProperty, $handler, new MatchResult(0, 0, 'field', fieldMode: 'read'), [], $return, 0, 0, 0))
+            ->toBe([[], $return, 0])
+            ->and($method->invoke(null, $missingClass, new MethodBody('injectorNoReturnType', null, 0, 0, []), new MatchResult(0, 0, 'field', fieldMode: 'read'), [], $return, 0, 0, 0))
+            ->toBe([[], $return, 0]);
+    });
+
+    it('classifies scalar field return targets for coercion', function (): void {
+        $method = new ReflectionMethod(Injector::class, 'coerceReplacementReturn');
+        $return = new Instruction(0, 'RETURN', Operand::constant('value', 0), Operand::unused(), Operand::unused());
+        $handler = new MethodBody('injectorHelperString', null, 0, 0, []);
+
+        foreach (['integer', 'float', 'boolean', 'array', 'string'] as $property) {
+            $target = new MethodBody(InjectorTypedFieldCoverageTarget::class . '::method', null, 0, 0, [
+                new Instruction(0, 'FETCH_OBJ_R', Operand::unused(), Operand::unused(), Operand::constant($property, 0)),
+            ]);
+
+            expect($method->invoke(null, $target, $handler, new MatchResult(0, 0, 'field', fieldMode: 'read'), [], $return, 0, 0, 0))
+                ->toBeArray();
+        }
+
+        $variable = new MethodBody(
+            'target',
+            null,
+            0,
+            0,
+            [new Instruction(0, 'ASSIGN', Operand::unused(), Operand::cv(1), Operand::unused())],
+            [1 => 'value'],
+            variableTypes: [1 => 'int'],
+        );
+        expect($method->invoke(null, $variable, $handler, new MatchResult(0, 0, 'variable', variableMode: 'load'), [], $return, 0, 0, 0))
+            ->toBeArray();
+
+        foreach ([1, 1.0, true, [], 'value', null, new stdClass()] as $value) {
+            $target = new MethodBody('constant-target', null, 0, 0, [
+                new Instruction(0, 'QM_ASSIGN', Operand::unused(), Operand::constant($value, 0), Operand::unused()),
+            ]);
+            expect($method->invoke(null, $target, new MethodBody('injectorHelperCoercedString', null, 0, 0, []), new MatchResult(0, 1, 'constant'), [], $return, 0, 0, 0))
+                ->toBeArray();
+        }
+
+        $variableTarget = new MethodBody('constant-target', null, 0, 0, [
+            new Instruction(0, 'FETCH_R', Operand::cv(0), Operand::cv(0), Operand::unused()),
+        ], variableTypes: [0 => 'int']);
+        expect($method->invoke(null, $variableTarget, new MethodBody('injectorHelperCoercedString', null, 0, 0, []), new MatchResult(0, 1, 'variable', fieldMode: 'read', variableMode: 'load'), [], $return, 0, 0, 0))
+            ->toBeArray()
+            ->and($method->invoke(null, new MethodBody('constant-target', null, 0, 0, [new Instruction(0, 'QM_ASSIGN', Operand::unused(), Operand::constant(1, 0), Operand::unused())]), new MethodBody('injectorHelperCoercedNoReturn', null, 0, 0, []), new MatchResult(0, 1, 'constant'), [], $return, 0, 0, 0))
+            ->toBeArray();
+    });
+
+    it('validates nullable redirect types and receivers', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $integer = (new ReflectionFunction('injectorHelperInt'))->getParameters()[0]->getType();
+        $string = (new ReflectionFunction('injectorHelperString'))->getParameters()[0]->getType();
+        $nullable = (new ReflectionFunction('injectorNullableIntegerReturn'))->getReturnType();
+        $untypedParameter = (new ReflectionFunction('injectorNoTypeParameter'))->getParameters()[0];
+        $nullableParameter = (new ReflectionFunction('injectorNullableParameter'))->getParameters()[0];
+        $coercedReceiver = (new ReflectionMethod(InjectorCoercedCoverageTarget::class, 'method'))->getParameters()[0];
+
+        expect(static fn() => $call('validateTypesForRedirect', $nullable, $integer, false, 'target', 'handler'))
+            ->toThrow(InvalidArgumentException::class, 'cannot accept nullable')
+            ->and(static fn() => $call('validateTypesForRedirect', $integer, $nullable, false, 'target', 'handler'))
+            ->toThrow(InvalidArgumentException::class, 'may return null')
+            ->and($call('validateTypesForRedirect', $nullable, $nullable, false, 'target', 'handler'))->toBeNull()
+            ->and(static fn() => $call('validateTypesForRedirect', $integer, $string, false, 'target', 'handler'))
+            ->toThrow(InvalidArgumentException::class, 'uses string')
+            ->and(static fn() => $call('validateTypeNamesForRedirect', 'int', 'string', true, false, false, 'target', 'handler'))
+            ->toThrow(InvalidArgumentException::class, 'cannot accept nullable')
+            ->and(static fn() => $call('validateTypeNamesForRedirect', 'int', 'string', false, true, false, 'target', 'handler'))
+            ->toThrow(InvalidArgumentException::class, 'may return null')
+            ->and($call('validateTypeNamesForRedirect', 'int', 'string', true, true, false, 'target', 'handler'))->toBeNull()
+            ->and(static fn() => $call('validateTypeNamesForRedirect', 'int', 'string', false, false, false, 'target', 'handler'))
+            ->toThrow(InvalidArgumentException::class, 'uses string')
+            ->and($call('validateRedirectReceiverType', $untypedParameter, stdClass::class, 'handler', false))->toBeNull()
+            ->and(static fn() => $call('validateRedirectReceiverType', $nullableParameter, stdClass::class, 'handler', false))
+            ->toThrow(InvalidArgumentException::class, 'must not be nullable')
+            ->and($call('validateRedirectReceiverType', $coercedReceiver, 'int', 'handler', true))->toBeNull()
+            ->and(static fn() => $call('validateRedirectReceiverType', (new ReflectionFunction('injectorHelperInt'))->getParameters()[0], stdClass::class, 'handler', false))
+            ->toThrow(InvalidArgumentException::class, 'expects int');
+    });
+
+    it('handles missing and untyped field metadata during redirect validation', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $handler = new MethodBody('injectorHelperString', null, 0, 0, []);
+        $field = static function (string $target, Operand $name): MethodBody {
+            return new MethodBody($target, null, 0, 0, [
+                new Instruction(0, 'FETCH_OBJ_R', Operand::unused(), Operand::unused(), $name),
+            ]);
+        };
+
+        expect($call('validateFieldRedirectTypes', $field('MissingInjectorClass::method', Operand::constant('value', 0)), $handler, new MatchResult(0, 0, 'field', fieldMode: 'read')))
+            ->toBeNull()
+            ->and($call('validateFieldRedirectTypes', $field(InjectorHelperCoverageTarget::class . '::method', Operand::constant('missing', 0)), $handler, new MatchResult(0, 0, 'field', fieldMode: 'read')))
+            ->toBeNull()
+            ->and($call('validateFieldRedirectTypes', $field(InjectorTypedFieldCoverageTarget::class . '::method', Operand::constant('untyped', 0)), $handler, new MatchResult(0, 0, 'field', fieldMode: 'read')))
+            ->toBeNull()
+            ->and($call('validateFieldRedirectTypes', $field('not-a-method', Operand::unused()), $handler, new MatchResult(0, 0, 'field', fieldMode: 'read')))
+            ->toBeNull()
+            ->and($call('validateFieldRedirectTypes', $field(InjectorTypedFieldCoverageTarget::class . '::method', Operand::unused()), $handler, new MatchResult(0, 0, 'field', fieldMode: 'read')))
+            ->toBeNull();
+    });
+
+    it('skips constructor validation without a class operand or value return', function (): void {
+        $method = new ReflectionMethod(Injector::class, 'validateConstructorRedirectType');
+        $target = new MethodBody('target', null, 0, 0, [
+            new Instruction(0, 'NEW', Operand::unused(), Operand::unused(), Operand::unused()),
+        ]);
+
+        expect($method->invoke(null, $target, new MethodBody('injectorHelperCallback', null, 0, 0, []), new MatchResult(0, 0, 'new')))
+            ->toBeNull();
+    });
+
+    it('resolves static arrays and rejects malformed array constructions', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $unused = Operand::unused();
+        $array = Operand::constant(['value'], 0);
+        $assign = new Instruction(0, 'ASSIGN', $unused, Operand::cv(1), $array);
+
+        expect($call('staticArrayOperand', [$assign], $array, 1))->toBe(['value'])
+            ->and($call('staticArrayOperand', [$assign], Operand::cv(2), 1))->toBeNull()
+            ->and($call('staticArrayOperand', [], Operand::variable(1), 0))->toBeNull()
+            ->and($call('literalArrayReturn', new MethodBody('array', null, 0, 0, [
+                new Instruction(0, 'RETURN', $unused, Operand::constant(['key' => 'value'], 0), $unused),
+            ])))->toBeNull()
+            ->and($call('arrayConstructionOperands', [
+                new Instruction(0, 'INIT_ARRAY', Operand::temporary(16), Operand::constant('value', 0), $unused),
+                new Instruction(0, 'ADD_ARRAY_ELEMENT', Operand::temporary(16), Operand::constant('other', 0), Operand::constant('key', 0)),
+            ], Operand::temporary(16)))->toBeNull()
+            ->and($call('arrayConstructionTemporary', [], Operand::variable(1)))->toBeNull();
+
+        $functionInstructions = [
+            new Instruction(0, 'INIT_FCALL', $unused, $unused, Operand::constant('injectorLiteralArray', 0)),
+            new Instruction(0, 'DO_FCALL', Operand::temporary(16), $unused, $unused),
+            new Instruction(0, 'ASSIGN', $unused, Operand::cv(1), Operand::temporary(16)),
+        ];
+        expect($call('staticArrayOperand', $functionInstructions, Operand::cv(1), 3))->toBe(['value']);
+
+        $staticInstructions = [
+            new Instruction(0, 'INIT_STATIC_METHOD_CALL', $unused, Operand::constant(ReflectionClass::class, 0), Operand::constant('getName', 0)),
+            new Instruction(0, 'DO_FCALL', Operand::temporary(16), $unused, $unused),
+            new Instruction(0, 'ASSIGN', $unused, Operand::cv(1), Operand::temporary(16)),
+        ];
+        expect($call('staticArrayOperand', $staticInstructions, Operand::cv(1), 3))->toBeNull();
+
+        $internalInstructions = [
+            new Instruction(0, 'INIT_FCALL', $unused, $unused, Operand::constant('strlen', 0)),
+            new Instruction(0, 'DO_FCALL', Operand::temporary(16), $unused, $unused),
+            new Instruction(0, 'ASSIGN', $unused, Operand::cv(1), Operand::temporary(16)),
+        ];
+        expect($call('staticArrayOperand', $internalInstructions, Operand::cv(1), 3))->toBeNull();
+    });
+
+    it('validates constructor replacement receive mappings', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $unused = Operand::unused();
+        $match = new MatchResult(0, 1, 'new');
+        $target = static function (Operand $class) use ($unused): MethodBody {
+            return new MethodBody('target', null, 0, 0, [
+                new Instruction(0, 'NEW', $unused, $class, $unused),
+            ]);
+        };
+        $receive = static function (Operand $result) use ($unused): Instruction {
+            return new Instruction(0, 'RECV', $result, $unused, $unused);
+        };
+
+        expect(static fn() => $call('constructorReplacementInputMap', $target(Operand::constant(stdClass::class, 0)), new MethodBody('handler', null, 0, 0, [$receive($unused)]), $match))
+            ->toThrow(InvalidArgumentException::class, 'has no CV operand')
+            ->and($call('constructorReplacementInputMap', $target($unused), new MethodBody('handler', null, 0, 0, [$receive(Operand::cv(0))]), $match))
+            ->toBe([])
+            ->and($call('constructorReplacementInputMap', $target(Operand::constant('MissingInjectorConstructor', 0)), new MethodBody('handler', null, 0, 0, [$receive(Operand::cv(0))]), $match))
+            ->toBe([])
+            ->and(static fn() => $call('constructorReplacementInputMap', $target(Operand::constant(stdClass::class, 0)), new MethodBody('handler', null, 0, 0, [$receive(Operand::cv(0)), $receive(Operand::cv(1))]), $match))
+            ->toThrow(InvalidArgumentException::class, 'expects 2 argument(s)');
+    });
+
     it('returns default values and handles helper metadata without bytecode', function (): void {
         $call = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(Injector::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -293,7 +778,6 @@ describe('Injector', function (): void {
 
     it('validates callback parameter compatibility and coercion rules', function (): void {
         $method = new ReflectionMethod(Injector::class, 'validateCallbackParameterType');
-        $method->setAccessible(true);
         $parameter = static function (string $function): ReflectionParameter {
             return (new ReflectionFunction($function))->getParameters()[0];
         };
@@ -318,7 +802,6 @@ describe('Injector', function (): void {
     it('covers callback local mapping edge cases', function (): void {
         $call = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(Injector::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -368,12 +851,75 @@ describe('Injector', function (): void {
             throw new RuntimeException('Expected synthetic callback context map');
         }
         expect($syntheticContext['cvMap'][1])->toEqual(Operand::cv(7));
+
+        expect($call('localAvailableAt', $target, Operand::constant('value', 0), 0))->toBeFalse()
+            ->and($call('localAvailableAt', $target, Operand::cv(0), 0))->toBeTrue()
+            ->and($call('localAvailableAt', new MethodBody('injectorHelperString', null, 0, 0, [
+                new Instruction(0, 'ASSIGN', Operand::unused(), Operand::cv(1), Operand::constant('value', 0)),
+            ], [1 => 'local']), Operand::cv(1), 1))->toBeTrue();
+
+        $capturedType = new ReflectionFunction('injectorIntParameter')->getParameters()[0];
+        $untyped = new ReflectionFunction('injectorNoTypeParameter')->getParameters()[0];
+        expect($call('validateCapturedLocalType', $capturedType, null, 'handler', false))->toBeNull()
+            ->and($call('validateCapturedLocalType', $untyped, 'object', 'handler', false))->toBeNull();
+
+        $targetWithParameter = new MethodBody(
+            'injectorHelperString',
+            null,
+            0,
+            0,
+            [new Instruction(0, 'RECV', Operand::cv(0), $unused, $unused)],
+            [0 => 'value'],
+        );
+        $handlerReceives = [
+            new Instruction(0, 'RECV', Operand::cv(0), $unused, $unused),
+            new Instruction(0, 'RECV', Operand::cv(1), $unused, $unused),
+        ];
+        expect(static fn() => $call('callbackContext', $targetWithParameter, new MethodBody('injectorHelperCallbackBoth', null, 0, 0, $handlerReceives), $inject, new MatchResult(0, 0, 'head')))
+            ->toThrow(CaptureException::class, 'both Local and Parameter')
+            ->and(static fn() => $call('callbackContext', $targetWithParameter, new MethodBody('injectorHelperCallbackExplicitLocal', null, 0, 0, $handlerReceives), new Inject('injectorHelperString', new At('HEAD'), locals: LocalCapture::NO_CAPTURE), new MatchResult(0, 0, 'head')))
+            ->toThrow(CaptureException::class, 'local while local capture is disabled')
+            ->and(static fn() => $call('callbackContext', $targetWithParameter, new MethodBody('injectorHelperCallbackExplicitLocal', null, 0, 0, $handlerReceives), $inject, new MatchResult(0, 0, 'head')))
+            ->toThrow(CaptureException::class, 'names a target parameter')
+            ->and(static fn() => $call('callbackContext', $targetWithParameter, new MethodBody('injectorHelperCallbackMissingLocal', null, 0, 0, $handlerReceives), $inject, new MatchResult(0, 0, 'head')))
+            ->toThrow(CaptureException::class, 'cannot be captured')
+            ->and(static fn() => $call('callbackContext', $targetWithParameter, new MethodBody('injectorHelperCallbackMissingParameter', null, 0, 0, $handlerReceives), $inject, new MatchResult(0, 0, 'head')))
+            ->toThrow(CaptureException::class, 'cannot resolve its target parameter')
+            ->and(static fn() => $call('callbackContext', new MethodBody('injectorHelperString', null, 0, 0, [new Instruction(0, 'RECV', Operand::cv(0), $unused, $unused)]), new MethodBody('injectorHelperCallbackNamedValueParameter', null, 0, 0, $handlerReceives), $inject, new MatchResult(0, 0, 'head')))
+            ->toThrow(CaptureException::class, 'cannot capture target parameter')
+            ->and(static fn() => $call('callbackContext', new MethodBody('injectorHelperString', null, 0, 0, [
+                new Instruction(0, 'ASSIGN', Operand::cv(1), Operand::cv(1), Operand::constant('local', 0)),
+                new Instruction(0, 'NOP', $unused, $unused, $unused),
+            ], [0 => 'value', 1 => 'other']), new MethodBody('injectorHelperCallbackWithOtherLocal', null, 0, 0, $handlerReceives), new Inject('injectorHelperString', new At('HEAD'), locals: LocalCapture::NO_CAPTURE), new MatchResult(0, 1, 'head', action: 'after')))
+            ->toThrow(CaptureException::class, 'local and local capture is disabled');
+
+        $localAfterTarget = new MethodBody('injectorHelperString', null, 0, 0, [
+            new Instruction(0, 'ASSIGN', Operand::cv(1), Operand::cv(1), Operand::constant('local', 0)),
+            new Instruction(0, 'NOP', $unused, $unused, $unused),
+        ], [0 => 'value', 1 => 'other']);
+        expect($call('callbackContext', $localAfterTarget, new MethodBody('injectorHelperCallbackExplicitOtherLocal', null, 0, 0, $handlerReceives), $inject, new MatchResult(0, 1, 'head', action: 'after')))
+            ->toBeArray();
+
+        $positionalReceives = [
+            new Instruction(0, 'RECV', Operand::cv(0), $unused, $unused),
+            new Instruction(0, 'RECV', Operand::cv(1), $unused, $unused),
+            new Instruction(0, 'RECV', Operand::cv(2), $unused, $unused),
+        ];
+        $positionalTarget = new MethodBody('injectorHelperString', null, 0, 0, [
+            new Instruction(0, 'ASSIGN', Operand::cv(1), Operand::cv(1), Operand::constant('local', 0)),
+            new Instruction(0, 'NOP', $unused, $unused, $unused),
+        ], [0 => 'value', 1 => 'local']);
+        expect($call('callbackContext', $positionalTarget, new MethodBody('injectorHelperCallbackWithPositionalLocal', null, 0, 0, $positionalReceives), $inject, new MatchResult(0, 1, 'head', action: 'after')))
+            ->toBeArray();
+
+        expect($call('callbackContext', $targetWithParameter, new MethodBody('injectorHelperCallback', null, 0, 0, [
+            new Instruction(0, 'RECV', $unused, $unused, $unused),
+        ]), $inject, new MatchResult(0, 0, 'head')))->toBeNull();
     });
 
     it('covers virtual CallbackInfo lowering guards', function (): void {
         $call = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(Injector::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -496,7 +1042,6 @@ describe('Injector', function (): void {
     it('validates invocation reflection and modifier return types', function (): void {
         $call = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(Injector::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -557,7 +1102,6 @@ describe('Injector', function (): void {
     it('covers Injector replacement shapes and failure guards', function (): void {
         $call = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(Injector::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -647,7 +1191,6 @@ describe('Injector', function (): void {
     it('covers malformed virtual argument calls and redirect return validation', function (): void {
         $call = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(Injector::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -677,6 +1220,10 @@ describe('Injector', function (): void {
             new Instruction(0, 'DO_METHOD_CALL', Operand::cv(1), $unused, $unused),
         ]);
         expect($lower($nested))->toBeArray();
+
+        expect($call('prepareArgsHandler', $target, new MethodBody('injectorArgsHelper', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), $unused, $unused),
+        ]), new MatchResult(0, 0, 'invoke'), 0, 0, 0))->toBeArray();
 
         expect(static fn() => $lower(new MethodBody('injectorIntegerArgument', null, 0, 0, [new Instruction(0, 'INIT_METHOD_CALL', $unused, Operand::cv(0), Operand::constant('get', 0))])))
             ->toThrow(InvalidArgumentException::class)
@@ -715,6 +1262,60 @@ describe('Injector', function (): void {
             ))->not->toThrow(Throwable::class);
     });
 
+    it('rejects duplicate callback binding annotations', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $target = new MethodBody(
+            'injectorHelperString',
+            null,
+            0,
+            0,
+            [new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused())],
+            [0 => 'value'],
+        );
+        $handler = new MethodBody(
+            'injectorHelperDuplicateLocal',
+            null,
+            0,
+            0,
+            [
+                new Instruction(0, 'RECV', Operand::cv(0), Operand::unused(), Operand::unused()),
+                new Instruction(0, 'RECV', Operand::cv(1), Operand::unused(), Operand::unused()),
+            ],
+        );
+
+        expect(static fn() => $call('callbackContext', $target, $handler, new Inject('run', new At('HEAD')), new MatchResult(0, 0, 'head')))
+            ->toThrow(CaptureException::class, 'duplicate binding declarations');
+    });
+
+    it('rejects malformed modifier receive operands', function (): void {
+        $call = static function (string $name, mixed ...$arguments): mixed {
+            return (new ReflectionMethod(Injector::class, $name))->invoke(null, ...$arguments);
+        };
+        $unused = Operand::unused();
+        $handler = new MethodBody('injectorHelperString', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), $unused, $unused),
+            new Instruction(0, 'RECV', Operand::constant('not-a-cv', 0), $unused, $unused),
+        ]);
+        $arrayTarget = new MethodBody('not-a-method', null, 0, 0, [
+            new Instruction(0, 'ASSIGN_DIM', $unused, Operand::cv(0), Operand::constant('key', 0)),
+            new Instruction(0, 'OP_DATA', $unused, Operand::constant('value', 0), $unused),
+        ]);
+
+        expect(static fn() => $call('modifierInputMap', $arrayTarget, $handler, new MatchResult(0, 1, 'field', fieldMode: 'array-write')))
+            ->toThrow(InvalidArgumentException::class, 'no CV operand');
+
+        $constantTarget = new MethodBody('not-a-method', null, 0, 0, [
+            new Instruction(0, 'NOP', $unused, $unused, $unused),
+        ]);
+        $validHandler = new MethodBody('injectorHelperString', null, 0, 0, [
+            new Instruction(0, 'RECV', Operand::cv(0), $unused, $unused),
+        ]);
+        expect(static fn() => $call('modifierInputMap', $constantTarget, $validHandler, new MatchResult(0, 1, 'constant')))
+            ->toThrow(InvalidArgumentException::class, 'no literal operand');
+    });
+
     class ParentClassForInjectorCoverage {}
     class ChildClassForInjectorCoverage extends ParentClassForInjectorCoverage {}
 
@@ -727,5 +1328,15 @@ describe('Injector', function (): void {
     final class InjectorHelperCoverageTarget
     {
         public function method(): void {}
+    }
+
+    final class InjectorTypedFieldCoverageTarget
+    {
+        public int $integer;
+        public float $float;
+        public bool $boolean;
+        public array $array;
+        public string $string;
+        public $untyped;
     }
 });

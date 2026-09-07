@@ -28,17 +28,20 @@ namespace Tests\Unit\BytecodeFixtures {
             return $value * 2;
         }
     }
+
 }
 
 namespace {
     use Communism\Bytecode\Bytecode;
     use Tests\Unit\BytecodeFixtures\InvokableBytecodeObject;
     use Tests\Unit\BytecodeFixtures\SampleBytecodeClass;
+    use Tests\Unit\BytecodeFixtures\MissingRuntimeMetadataClass;
     use Zendful\OpcodeHandle;
     use Zendful\OperandHandle;
 
     describe('Bytecode', function (): void {
         covers(\Communism\Bytecode\Bytecode::class);
+
 
         it('disassembles a named function', function (): void {
             $dump = Bytecode::disassemble('Tests\\Unit\\BytecodeFixtures\\sample_bytecode_function');
@@ -89,7 +92,6 @@ namespace {
         it('formats every supported operand shape', function (): void {
             $call = static function (string $name, mixed ...$arguments): mixed {
                 $method = new ReflectionMethod(Bytecode::class, $name);
-                $method->setAccessible(true);
 
                 return $method->invoke(null, ...$arguments);
             };

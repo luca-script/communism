@@ -12,7 +12,13 @@ use Communism\Reflect\ReflectionClass;
 use Communism\Mixin\Slice;
 
 describe('Inject', function (): void {
-    covers([Inject::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+    covers([
+        CallbackInfo::class,
+        Group::class,
+        Inject::class,
+        Slice::class,
+        ...COMMUNISM_INJECTOR_COVERAGE_CLASSES,
+    ]);
 
     final class MultiTargetInjectionTarget
     {

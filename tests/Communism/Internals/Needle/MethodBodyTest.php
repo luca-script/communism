@@ -7,17 +7,19 @@ use Communism\Internals\Needle\MethodBody;
 use Communism\Internals\Needle\Operand;
 
 describe('MethodBody', function (): void {
-    covers(MethodBody::class);
+    covers([Instruction::class, MethodBody::class]);
 
     it('supports MethodBody metadata and immutable instruction transformations', function (): void {
         $instruction = new Instruction(1, 'TEST', Operand::unused(), Operand::cv(0), Operand::raw(4, 3));
-        $body = new MethodBody('run', 'test.php', 1, 2, [$instruction], [0 => 'value'], 2, 3);
+        $body = new MethodBody('run', 'test.php', 1, 2, [$instruction], [0 => 'value'], 2, 3, [0 => 'int']);
 
         $variableOperand = $body->variableOperand('value');
 
         expect($body->instructions())->toBe([$instruction])
             ->and($body->count())->toBe(1)
             ->and($body->instruction(0))->toBe($instruction)
+            ->and($body->variableType(Operand::cv(0)))->toBe('int')
+            ->and($body->variableType(Operand::temporary(0)))->toBeNull()
             ->and($body->variableName(Operand::cv(0)))->toBe('value')
             ->and($body->variableName(Operand::cv(1)))->toBeNull()
             ->and($body->variableName(Operand::temporary(0)))->toBeNull()

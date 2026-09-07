@@ -61,12 +61,6 @@ final readonly class ReflectionProperty
         $className = $this->ensureDeclaringClassInitialized();
         $propInfo = Zendful::property($className, $this->getName());
 
-        if (!$propInfo->exists()) {
-            // @codeCoverageIgnoreStart
-            return $callback();
-            // @codeCoverageIgnoreEnd
-        }
-
         return $propInfo->withVisibility(match ($visibility) {
             Visibility::Public => 'public',
             Visibility::Protected => 'protected',

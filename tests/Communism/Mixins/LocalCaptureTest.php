@@ -13,7 +13,16 @@ use Communism\Mixin\Mixin;
 use Communism\Reflect\ReflectionClass;
 
 describe('LocalCapture', function (): void {
-    covers([LocalCapture::class, Local::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+    covers([
+        CallbackInjectionException::class,
+        Local::class,
+        LocalCapture::class,
+        ...COMMUNISM_INJECTOR_COVERAGE_CLASSES,
+    ]);
+
+    it('rejects an empty captured local name', function (): void {
+        expect(static fn(): Local => new Local(''))->toThrow(InvalidArgumentException::class, 'must not be empty');
+    });
 
     #[Mixin(LocalCaptureSoftTarget::class)]
     final class LocalCaptureSoftMixin

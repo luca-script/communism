@@ -147,6 +147,32 @@ describe('Runtime', function (): void {
 
     final class ManifestUnannotatedTransform {}
 
+    #[Mixin('MissingManifestRuntimeTarget')]
+    final class ManifestMissingTargetMixin
+    {
+        private function __construct() {}
+    }
+
+    final class ManifestMissingTargetDefinition extends Manifest
+    {
+        /** @return list<string> */
+        #[Override]
+        public function getTransforms(): array
+        {
+            return [ManifestMissingTargetMixin::class];
+        }
+    }
+
+    final class ManifestAssociativeTransformsDefinition extends Manifest
+    {
+        /** @return array<string, string> */
+        #[Override]
+        public function getTransforms(): array
+        {
+            return ['mixin' => ManifestRuntimeMixin::class];
+        }
+    }
+
     final class ManifestUnannotatedDefinition extends Manifest
     {
         /** @return list<string> */
@@ -160,6 +186,16 @@ describe('Runtime', function (): void {
     it('rejects manifest transforms without a Mixin declaration', function (): void {
         expect(static fn() => Runtime::installOrGet()->add(ManifestUnannotatedDefinition::class))
             ->toThrow(InvalidArgumentException::class, 'at least one #[Mixin]');
+    });
+
+    it('rejects required manifests with undeclared mixin targets', function (): void {
+        expect(static fn() => Runtime::installOrGet()->add(ManifestMissingTargetDefinition::class))
+            ->toThrow(InvalidArgumentException::class, 'target MissingManifestRuntimeTarget is not declared');
+    });
+
+    it('rejects manifests whose transforms are not a list', function (): void {
+        expect(static fn() => Runtime::installOrGet()->add(ManifestAssociativeTransformsDefinition::class))
+            ->toThrow(InvalidArgumentException::class, 'must return a list');
     });
 
     final class ManifestPrivateConstructorDefinition extends Manifest
@@ -208,6 +244,65 @@ describe('Runtime', function (): void {
     final class ManifestGlobTarget {}
     final class ManifestUnmatchedTarget {}
 
+    /** @method string runtimeSelectorMarker() */
+    final class ManifestRuntimeAppliedSelectorTarget {}
+    /** @method string runtimeSelectorMarker() */
+    final class ManifestRuntimeAppliedSelectorExtraTarget {}
+    final class ManifestRuntimeUnmatchedSelectorTarget {}
+
+    #[Mixin(ManifestRuntimeAppliedSelectorTarget::class)]
+    #[Applies('GLOB', 'ManifestRuntimeAppliedSelectorT*')]
+    #[Applies('EXACT', ManifestRuntimeAppliedSelectorExtraTarget::class)]
+    final class ManifestRuntimeAppliedSelectorMixin
+    {
+        private function __construct() {}
+
+        public function runtimeSelectorMarker(): string
+        {
+            return 'runtime-selected';
+        }
+    }
+
+    final class ManifestRuntimeAppliedSelectorDefinition extends Manifest
+    {
+        /** @return list<string> */
+        #[Override]
+        public function getTransforms(): array
+        {
+            return [ManifestRuntimeAppliedSelectorMixin::class];
+        }
+    }
+
+    it('applies manifest transforms through their Applies selectors', function (): void {
+        Runtime::installOrGet()->add(ManifestRuntimeAppliedSelectorDefinition::class);
+
+        expect((new ManifestRuntimeAppliedSelectorTarget())->runtimeSelectorMarker())
+            ->toBe('runtime-selected')
+            ->and((new ManifestRuntimeAppliedSelectorExtraTarget())->runtimeSelectorMarker())
+            ->toBe('runtime-selected')
+            ->and((new \ReflectionClass(ManifestRuntimeUnmatchedSelectorTarget::class))
+                ->hasMethod('runtimeSelectorMarker'))->toBeFalse();
+    });
+
+    it('reuses cached single manifests and evaluates Applies selectors', function (): void {
+        $runtime = Runtime::installOrGet();
+        $runtime->add(ManifestRuntimeDefinition::class);
+        $resolve = new \ReflectionMethod(Runtime::class, 'resolve');
+
+        expect($resolve->invoke($runtime, ManifestRuntimeDefinition::class))
+            ->toBe($resolve->invoke($runtime, ManifestRuntimeDefinition::class));
+
+        $reflection = new \ReflectionClass(ManifestRuntimeAppliedSelectorMixin::class);
+        $allows = new \ReflectionMethod(Runtime::class, 'mixinAllows');
+        $mixins = $reflection->getAttributes(Mixin::class);
+        $selectors = $reflection->getAttributes(Applies::class);
+
+        expect($allows->invoke($runtime, $mixins, $selectors, ManifestRuntimeAppliedSelectorExtraTarget::class))
+            ->toBeTrue()
+            ->and($allows->invoke($runtime, $mixins, $selectors, ManifestRuntimeUnmatchedSelectorTarget::class))
+            ->toBeFalse();
+    });
+
     #[Mixin(ManifestRuntimeTarget::class)]
     #[Applies(ManifestRegexTarget::class, ManifestGlobTarget::class)]
     #[Applies('REGEX', 'ManifestRegexTarget', 'NeverMatchedTarget')]
@@ -236,6 +331,8 @@ describe('Runtime', function (): void {
     it('rejects empty Applies selectors and invalid regular expressions', function (): void {
         expect(static fn() => new Applies())
             ->toThrow(InvalidArgumentException::class, 'at least one selector')
+            ->and(static fn() => new Applies('REGEX'))
+            ->toThrow(InvalidArgumentException::class, 'class name or EXACT')
             ->and(static fn() => new Applies('REGEX', '['))
             ->toThrow(InvalidArgumentException::class, 'REGEX selector is invalid');
     });

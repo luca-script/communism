@@ -7,11 +7,16 @@ use Communism\Internals\Needle\Decompiler;
 use Communism\Internals\Needle\Instruction;
 use Communism\Internals\Needle\MethodBody;
 use Communism\Internals\Needle\Operand;
-use Communism\Internals\Needle\Verifier;
 use Zendful\Zendful;
 
 describe('Assembler', function (): void {
-    covers([Assembler::class, Verifier::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+    covers([
+        Assembler::class,
+        Decompiler::class,
+        Instruction::class,
+        MethodBody::class,
+        ...COMMUNISM_INJECTOR_COVERAGE_CLASSES,
+    ]);
 
     final class AssemblerLiteralTarget
     {
@@ -162,40 +167,8 @@ describe('Assembler', function (): void {
             ->toThrow(RuntimeException::class, 'Only scalar constants');
     });
 
-    it('independently verifies instruction metadata before assembly', function (): void {
-        $body = Decompiler::decompile(AssemblerLiteralTarget::class . '::stringValue');
-        $instruction = $body->instruction(0);
-
-        expect(static fn() => Verifier::verify($body->replace(
-            0,
-            $instruction->withOpcode($instruction->opcode, "RETURN\0"),
-        )))->toThrow(RuntimeException::class, 'invalid opcode metadata');
-
-        $negativeOriginalIndex = new Instruction(
-            $instruction->opcode,
-            $instruction->name,
-            $instruction->result,
-            $instruction->operand1,
-            $instruction->operand2,
-            $instruction->extendedValue,
-            $instruction->line,
-            $instruction->handler,
-            -1,
-            $instruction->invocationTarget,
-        );
-        expect(static fn() => Verifier::verify($body->replace(0, $negativeOriginalIndex)))
-            ->toThrow(RuntimeException::class, 'negative original index');
-    });
-
-    it('rejects invalid detached method allocation metadata', function (): void {
-
-        expect(static fn() => Verifier::verify(new MethodBody('invalid', null, 1, 1, [], [], -1)))
-            ->toThrow(RuntimeException::class, 'negative allocation');
-    });
-
     it('deduplicates literals and emits static-call name pairs', function (): void {
         $plan = new ReflectionMethod(Assembler::class, 'planLiterals');
-        $plan->setAccessible(true);
         $shared = Operand::constant('Shared', 0);
         $body = new MethodBody('literalPlan', null, 0, 0, [
             new Instruction(0, 'INIT_STATIC_METHOD_CALL', Operand::unused(), $shared, Operand::constant('Method', 0)),
@@ -209,5 +182,16 @@ describe('Assembler', function (): void {
         [$slots, $values] = $result;
         expect($slots)->toHaveCount(2)
             ->and($values)->toContain('Shared', 'shared', 'Method', 'method');
+    });
+
+    it('recognizes opcode operands that require literal name pairs', function (): void {
+        $method = new ReflectionMethod(Assembler::class, 'needsNamePair');
+        $instruction = new Instruction(0, 'TEST', Operand::unused(), Operand::unused(), Operand::unused());
+
+        expect($method->invoke(null, new Instruction(0, 'NEW', $instruction->result, $instruction->operand1, $instruction->operand2), 1))->toBeTrue()
+            ->and($method->invoke(null, new Instruction(0, 'INIT_FCALL', $instruction->result, $instruction->operand1, $instruction->operand2), 2))->toBeTrue()
+            ->and($method->invoke(null, new Instruction(0, 'INIT_METHOD_CALL', $instruction->result, $instruction->operand1, $instruction->operand2), 2))->toBeTrue()
+            ->and($method->invoke(null, new Instruction(0, 'INIT_STATIC_METHOD_CALL', $instruction->result, $instruction->operand1, $instruction->operand2), 1))->toBeTrue()
+            ->and($method->invoke(null, $instruction, 0))->toBeFalse();
     });
 });

@@ -52,12 +52,10 @@ final readonly class ReflectionMethod
      */
     public function withVisibility(Visibility $visibility, callable $callback): mixed
     {
-        $methodInfo = Zendful::method($this->reflection->getDeclaringClass()->getName(), $this->getName());
-
-        if (!$methodInfo->exists()) {
-            // @codeCoverageIgnoreStart
+        try {
+            $methodInfo = Zendful::method($this->reflection->getDeclaringClass()->getName(), $this->getName());
+        } catch (\InvalidArgumentException) {
             return $callback();
-            // @codeCoverageIgnoreEnd
         }
 
         return $methodInfo->withVisibility(match ($visibility) {

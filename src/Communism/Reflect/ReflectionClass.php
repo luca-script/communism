@@ -180,12 +180,6 @@ final readonly class ReflectionClass
                     continue;
                 }
 
-                if ($classRef->isTrait()) {
-                    // @codeCoverageIgnoreStart
-                    continue;
-                    // @codeCoverageIgnoreEnd
-                }
-
                 if (!in_array($traitName, $classRef->getTraitNames(), true)) {
                     continue;
                 }

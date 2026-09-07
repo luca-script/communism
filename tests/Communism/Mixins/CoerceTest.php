@@ -13,7 +13,7 @@ use Communism\Internals\Needle\Decompiler;
 use Communism\Reflect\ReflectionClass;
 
 describe('Coerce', function (): void {
-    covers([Coerce::class, Redirect::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+    covers([Coerce::class, HandlerValidationException::class, Redirect::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
     interface CoerceReceiverContract
     {

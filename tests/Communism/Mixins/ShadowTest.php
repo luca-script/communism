@@ -9,6 +9,14 @@ use Communism\Mixin\Shadow;
 describe('Shadow', function (): void {
     covers([Shadow::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
 
+    it('rejects empty Shadow aliases', function (): void {
+        expect(static fn(): Shadow => new Shadow(aliases: ['']))
+            ->toThrow(InvalidArgumentException::class, 'must not be empty');
+
+        expect(static fn(): Shadow => new Shadow('target', 'prefix'))
+            ->toThrow(InvalidArgumentException::class, 'mutually exclusive');
+    });
+
     #[Mixin(MethodShadowTarget::class)]
     final class MethodShadowMixin
     {

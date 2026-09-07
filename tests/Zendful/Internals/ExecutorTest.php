@@ -51,7 +51,6 @@ describe('Executor', function (): void {
         };
         $string->len = Natives::ZEND_MAX_SAFE_STRING_LENGTH + 1;
         $method = new ReflectionMethod(ZendfulExecutor::class, 'zendString');
-        $method->setAccessible(true);
 
         expect(static fn(): mixed => $method->invoke(null, $ffi, $string))
             ->toThrow(RuntimeException::class);
@@ -61,7 +60,6 @@ describe('Executor', function (): void {
         $ffi = Natives::ffi();
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulExecutor::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -132,7 +130,6 @@ describe('Executor', function (): void {
     it('validates detached assembly data and operand semantics defensively', function (): void {
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulExecutor::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -205,7 +202,6 @@ describe('Executor', function (): void {
     it('rejects invalid allocation sizes and missing literal storage before FFI writes', function (): void {
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulExecutor::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -324,10 +320,8 @@ describe('Executor', function (): void {
         $property = new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'value');
 
         $blacklistedMethods = new ReflectionProperty(ZendfulExecutor::class, 'blacklistedMethods');
-        $blacklistedMethods->setAccessible(true);
         $blacklistedMethods->setValue(null, []);
         $blacklistedClasses = new ReflectionProperty(ZendfulExecutor::class, 'blacklistedClasses');
-        $blacklistedClasses->setAccessible(true);
         $blacklistedClasses->setValue(null, []);
 
         ZendfulExecutor::disableJitForMethod($method);
@@ -547,7 +541,6 @@ describe('Executor', function (): void {
 
     it('resolves inherited and interface method hierarchies', function (): void {
         $method = new ReflectionMethod(ZendfulExecutor::class, 'classDerivesFrom');
-        $method->setAccessible(true);
 
         expect($method->invoke(null, ExecutorMutableTarget::class, ExecutorMutableTarget::class))->toBeTrue()
             ->and($method->invoke(null, ExecutorDerivedTarget::class, ExecutorMutableTarget::class))->toBeTrue()
@@ -583,7 +576,6 @@ describe('Executor', function (): void {
     it('formats object and resource constants without dereferencing them', function (): void {
         $ffi = Natives::ffi();
         $operandMethod = new ReflectionMethod(ZendfulExecutor::class, 'operand');
-        $operandMethod->setAccessible(true);
         /** @var \Zendful_FFI\zend_op_array $opArray */
         $opArray = $ffi->new('zend_op_array');
         $opline = $ffi->new('zend_op');
@@ -615,7 +607,6 @@ describe('Executor', function (): void {
     it('formats scalar constants through opcode operand metadata', function (): void {
         $ffi = Natives::ffi();
         $operandMethod = new ReflectionMethod(ZendfulExecutor::class, 'operand');
-        $operandMethod->setAccessible(true);
         /** @var \Zendful_FFI\zend_op_array $opArray */
         $opArray = $ffi->new('zend_op_array');
         $opline = $ffi->new('zend_op');
@@ -652,7 +643,6 @@ describe('Executor', function (): void {
         $ffi = Natives::ffi();
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulExecutor::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -671,7 +661,6 @@ describe('Executor', function (): void {
         $ffi = Natives::ffi();
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulExecutor::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -713,7 +702,6 @@ describe('Executor', function (): void {
 
     it('reports an absent property on a loaded class', function (): void {
         $method = new ReflectionMethod(ZendfulExecutor::class, 'propertyInfo');
-        $method->setAccessible(true);
 
         expect($method->invoke(null, new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'missing')))
             ->toBeNull();
@@ -722,7 +710,6 @@ describe('Executor', function (): void {
     it('rejects assembly before touching unavailable or internal runtime callables', function (): void {
         $assembly = new AssemblyPlanHandle(0, 0, [], []);
         $source = new ReflectionProperty(\Zendful\OpArrayHandle::class, 'source');
-        $source->setAccessible(true);
         $make = static function (FunctionHandle|MethodHandle $callable) use ($source): \Zendful\OpArrayHandle {
             $handle = (new ReflectionClass(\Zendful\OpArrayHandle::class))->newInstanceWithoutConstructor();
             $source->setValue($handle, $callable);
@@ -730,7 +717,6 @@ describe('Executor', function (): void {
             return $handle;
         };
         $assemble = new ReflectionMethod(ZendfulExecutor::class, 'assemble');
-        $assemble->setAccessible(true);
 
         expect(static fn(): mixed => $assemble->invoke(
             null,
@@ -747,7 +733,6 @@ describe('Executor', function (): void {
     it('fails closed for missing method, property, and class metadata', function (): void {
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulExecutor::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -765,7 +750,6 @@ describe('Executor', function (): void {
     it('rejects immutable functions before swapping their table entries', function (): void {
         $ffi = Natives::ffi();
         $entryMethod = new ReflectionMethod(ZendfulExecutor::class, 'entry');
-        $entryMethod->setAccessible(true);
         /** @var \Zendful_FFI\zval $entry */
         $entry = $entryMethod->invoke(null, new \Zendful\FunctionHandle('executorCoverageFirst'), $ffi);
         /** @var \Zendful_FFI\zend_function $function */
@@ -773,7 +757,6 @@ describe('Executor', function (): void {
         $originalFlags = $function->fn_flags;
         $function->fn_flags |= Natives::ZEND_ACC_IMMUTABLE;
         $assertWritable = new ReflectionMethod(ZendfulExecutor::class, 'assertWritableFunction');
-        $assertWritable->setAccessible(true);
 
         try {
             expect(static fn(): mixed => $assertWritable->invoke(null, $entry, 'immutable'))
@@ -798,7 +781,6 @@ describe('Executor', function (): void {
         $ffi = Natives::ffi();
         $method = new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'run');
         $entryMethod = new ReflectionMethod(ZendfulExecutor::class, 'methodEntry');
-        $entryMethod->setAccessible(true);
         /** @var \Zendful_FFI\zval $entry */
         $entry = $entryMethod->invoke(null, $method);
         /** @var \Zendful_FFI\zend_function $function */
@@ -806,7 +788,6 @@ describe('Executor', function (): void {
         $originalFlags = $function->fn_flags;
         $function->fn_flags |= Natives::ZEND_ACC_IMMUTABLE;
         $assertWritable = new ReflectionMethod(ZendfulExecutor::class, 'assertWritableMethod');
-        $assertWritable->setAccessible(true);
 
         try {
             expect(static fn(): mixed => $assertWritable->invoke(null, $method, $entry))
@@ -850,13 +831,11 @@ describe('Executor', function (): void {
     it('rejects immutable classes and non-readonly parents', function (): void {
         $class = new \Zendful\ClassHandle(ExecutorMutableTarget::class);
         $classInfoMethod = new ReflectionMethod(ZendfulExecutor::class, 'classInfo');
-        $classInfoMethod->setAccessible(true);
         /** @var \Zendful_FFI\zend_class_entry $classInfo */
         $classInfo = $classInfoMethod->invoke(null, $class);
         $originalFlags = $classInfo->ce_flags;
         $classInfo->ce_flags |= Natives::ZEND_ACC_IMMUTABLE;
         $writable = new ReflectionMethod(ZendfulExecutor::class, 'writableClassInfo');
-        $writable->setAccessible(true);
 
         try {
             expect(static fn(): mixed => $writable->invoke(null, $class))
@@ -884,11 +863,8 @@ describe('Executor', function (): void {
         $missingMethod = new \Zendful\MethodHandle('ZendfulNeverLoadedFlagsTarget', 'missing');
         $missingProperty = new \Zendful\PropertyHandle('ZendfulNeverLoadedFlagsTarget', 'missing');
         $methodFlags = new ReflectionMethod(ZendfulExecutor::class, 'methodFlags');
-        $methodFlags->setAccessible(true);
         $setMethodFlags = new ReflectionMethod(ZendfulExecutor::class, 'setMethodFlags');
-        $setMethodFlags->setAccessible(true);
         $setPropertyFlags = new ReflectionMethod(ZendfulExecutor::class, 'setPropertyFlags');
-        $setPropertyFlags->setAccessible(true);
 
         expect(static fn(): mixed => $methodFlags->invoke(null, $missingMethod))
             ->toThrow(InvalidArgumentException::class)
@@ -902,7 +878,6 @@ describe('Executor', function (): void {
         $ffi = Natives::ffi();
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulExecutor::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -932,10 +907,8 @@ describe('Executor', function (): void {
 
         $internalMethod = new \Zendful\MethodHandle(\DateTime::class, 'format');
         $methodEntry = new ReflectionMethod(ZendfulExecutor::class, 'methodEntry');
-        $methodEntry->setAccessible(true);
         $internalEntry = $methodEntry->invoke(null, $internalMethod);
         $assertWritable = new ReflectionMethod(ZendfulExecutor::class, 'assertWritableMethod');
-        $assertWritable->setAccessible(true);
 
         expect(static fn(): mixed => $assertWritable->invoke(null, $internalMethod, $internalEntry))
             ->toThrow(InvalidArgumentException::class)

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Communism\Reflect\ReflectionClass;
+use Communism\Mixin\Mixin;
 
 describe('ReflectionClass', function (): void {
     covers(ReflectionClass::class);
@@ -20,6 +21,17 @@ describe('ReflectionClass', function (): void {
     class ReflectionClassMutableCoverageTarget
     {
         public string $value;
+    }
+
+    #[Mixin(ReflectionClassMutableCoverageTarget::class)]
+    final class ReflectionClassInjectMixin
+    {
+        private function __construct() {}
+
+        public function injected(): string
+        {
+            return 'injected';
+        }
     }
 
     class ReflectionClassTraitKindTarget {}
@@ -53,6 +65,13 @@ describe('ReflectionClass', function (): void {
             ->toContain('value');
         expect(array_map(static fn($method): string => $method->getName(), $reflection->getMethods()))
             ->toContain('method');
+    });
+
+    it('injects methods into the reflected class', function (): void {
+        (new ReflectionClass(ReflectionClassMutableCoverageTarget::class))
+            ->inject(ReflectionClassInjectMixin::class);
+
+        expect((new ReflectionClassMutableCoverageTarget())->injected())->toBe('injected');
     });
 
     it('temporarily removes finality and restores it after the callback', function (): void {
@@ -122,7 +141,6 @@ describe('ReflectionClass', function (): void {
         expect((new ReflectionClass(ReflectionClassTraitHost::class))->getProperty('traitValue')->isReadOnly())->toBeFalse();
 
         $propertyReadonly = new ReflectionMethod(ReflectionClass::class, 'propertyReadonlyOnClass');
-        $propertyReadonly->setAccessible(true);
         expect($propertyReadonly->invoke($class, ReflectionClassMutableCoverageTarget::class, 'missing', true))
             ->toBeNull();
     });

@@ -174,11 +174,8 @@ final readonly class InvocationSpec
             }
             $type = substr($type, 1);
         }
-
+        /** @var list<string> $parts */
         $parts = preg_split('/[|&]/', $type);
-        if ($parts === false || $parts === []) {
-            return false;
-        }
 
         foreach ($parts as $part) {
             if (preg_match('/^[A-Za-z_][A-Za-z0-9_\\\\\/]*$/', $part) !== 1) {

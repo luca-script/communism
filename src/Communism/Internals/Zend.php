@@ -351,9 +351,7 @@ final class Zend
             $mutable = $method->getAttributes(Mutable::class);
             $surrogate = $method->getAttributes(Surrogate::class);
             if (count($surrogate) > 1) {
-                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Surrogate]', $traitName, $method->getName()));
-                // @codeCoverageIgnoreEnd
             }
             if ($surrogate !== []) {
                 $handlerName = \str_ends_with($method->getName(), 'Surrogate')
@@ -374,6 +372,7 @@ final class Zend
                     ));
                 }
                 if (isset($surrogates[$handlerName])) {
+                    // PHP method names are case-insensitive and cannot be declared twice.
                     // @codeCoverageIgnoreStart
                     throw new InvalidArgumentException(sprintf(
                         'Trait %s declares more than one surrogate for handler %s',
@@ -385,9 +384,7 @@ final class Zend
                 $surrogates[$handlerName] = $method->getName();
             }
             if (count($accessor) > 1 || count($invoker) > 1) {
-                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Accessor] or #[Invoker]', $traitName, $method->getName()));
-                // @codeCoverageIgnoreEnd
             }
             if ($accessor !== [] && $invoker !== []) {
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine #[Accessor] and #[Invoker]', $traitName, $method->getName()));
@@ -397,9 +394,7 @@ final class Zend
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine a generated member annotation with another method annotation', $traitName, $method->getName()));
             }
             if (count($final) > 1 || count($mutable) > 1) {
-                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Final] and #[Mutable]', $traitName, $method->getName()));
-                // @codeCoverageIgnoreEnd
             }
             if ($final !== [] && $injection !== []) {
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot mark an injection handler #[Final]', $traitName, $method->getName()));
@@ -411,9 +406,7 @@ final class Zend
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine #[Final] and #[Mutable]', $traitName, $method->getName()));
             }
             if (count($overwrite) > 1) {
-                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Overwrite]', $traitName, $method->getName()));
-                // @codeCoverageIgnoreEnd
             }
             if (count($intrinsic) > 1) {
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Intrinsic]', $traitName, $method->getName()));
@@ -431,9 +424,7 @@ final class Zend
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine #[SoftOverride] with another composition annotation', $traitName, $method->getName()));
             }
             if (count($shadow) > 1) {
-                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s may have only one #[Shadow]', $traitName, $method->getName()));
-                // @codeCoverageIgnoreEnd
             }
             if ($shadow !== [] && ($overwrite !== [] || $injection !== [] || $method->getAttributes(Unique::class) !== [])) {
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine #[Shadow] with another method annotation', $traitName, $method->getName()));
@@ -504,6 +495,7 @@ final class Zend
                 ));
             }
             if ($method->getAttributes(Mutable::class) !== [] && $method->getAttributes(Final_::class) !== []) {
+                // The earlier declaration validation rejects this combination first.
                 // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait method %s::%s cannot combine #[Final] and #[Mutable]', $traitName, $methodName));
                 // @codeCoverageIgnoreEnd
@@ -601,9 +593,7 @@ final class Zend
             $propertyFinal = $traitProperty->getAttributes(Final_::class);
             $propertyMutable = $traitProperty->getAttributes(Mutable::class);
             if (count($propertyFinal) > 1 || count($propertyMutable) > 1) {
-                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException(sprintf('Trait property %s::$%s may have only one #[Final] and #[Mutable]', $traitName, $traitProperty->getName()));
-                // @codeCoverageIgnoreEnd
             }
             if ($propertyFinal !== [] && $propertyMutable !== []) {
                 throw new InvalidArgumentException(sprintf('Trait property %s::$%s cannot combine #[Final] and #[Mutable]', $traitName, $traitProperty->getName()));
@@ -819,19 +809,11 @@ final class Zend
             $generated = $accessor !== [] ? $accessor[0]->newInstance() : $invoker[0]->newInstance();
             $sourceMethod = Zendful::method($traitName, $methodName);
             class_exists(AccessorInvokerTemplates::class);
-            if (!$sourceMethod->exists()) {
-                // @codeCoverageIgnoreStart
-                throw new InvalidArgumentException('Generated accessor/invoker source method was not found');
-                // @codeCoverageIgnoreEnd
-            }
             if ($accessor !== []) {
                 $templateName = self::accessorIsSetter($method)
                     ? ($method->isStatic() ? 'accessorStaticSet' : 'accessorSet')
                     : ($method->isStatic() ? 'accessorStaticGet' : 'accessorGet');
                 $templateMethod = Zendful::method(AccessorInvokerTemplates::class, $templateName);
-                if (!$templateMethod->exists()) {
-                    throw new InvalidArgumentException('Generated accessor template was not found');
-                }
                 $property = self::accessorProperty($className, $method, $generated->target);
                 self::installGeneratedAccessor($sourceMethod, $templateMethod, $className, $methodName, $property);
             } else {
@@ -851,17 +833,7 @@ final class Zend
         }
 
         foreach ($methodsToCompose as $methodName) {
-            if ($availableMethods[$methodName]->getAttributes(Accessor::class) !== [] || $availableMethods[$methodName]->getAttributes(Invoker::class) !== []) {
-                // @codeCoverageIgnoreStart
-                continue;
-                // @codeCoverageIgnoreEnd
-            }
             $sourceMethod = Zendful::method($traitName, $methodName);
-            if (!$sourceMethod->exists()) {
-                // @codeCoverageIgnoreStart
-                throw new InvalidArgumentException(sprintf('Could not find mixin method %s::%s', $traitName, $methodName));
-                // @codeCoverageIgnoreEnd
-            }
 
             $overwrite = $availableMethods[$methodName]->getAttributes(Overwrite::class);
             $intrinsic = $availableMethods[$methodName]->getAttributes(Intrinsic::class);
@@ -869,12 +841,6 @@ final class Zend
             $targetMethod = $interfaceMappings[$methodName]['target']
                 ?? ($overwrite === [] ? $methodName : self::overwriteTargetName($className, $methodName, $overwrite[0]->newInstance()));
             $methodLower = mb_strtolower($targetMethod);
-            if ($targetMethod === '') {
-                // @codeCoverageIgnoreStart
-                throw new InvalidArgumentException('Injected method names must not be empty');
-                // @codeCoverageIgnoreEnd
-            }
-
             if ($propertyMappings !== []) {
                 $sourceBody = \Communism\Internals\Needle\Decompiler::decompile($traitName . '::' . $methodName);
                 $rewritten = self::rewriteShadowProperties($sourceBody, $propertyMappings);
@@ -934,18 +900,6 @@ final class Zend
         }
 
         foreach ($rewrittenBodies as $targetMethod => $rewrittenBody) {
-            if ($targetMethod === '') {
-                // @codeCoverageIgnoreStart
-                throw new InvalidArgumentException('Injected target method names must not be empty');
-                // @codeCoverageIgnoreEnd
-            }
-
-            if (!method_exists($className, $targetMethod)) {
-                // @codeCoverageIgnoreStart
-                throw new InvalidArgumentException(sprintf('Could not find injected target method %s::%s', $className, $targetMethod));
-                // @codeCoverageIgnoreEnd
-            }
-
             \Communism\Internals\Needle\Assembler::write(
                 $rewrittenBody,
                 Zendful::method($className, $targetMethod)->opArray(),
@@ -1327,11 +1281,10 @@ final class Zend
     /** @param class-string $className */
     private static function setPropertyMutability(string $className, string $property, bool $mutable, bool $final): void
     {
-        $propertyInfo = Zendful::property($className, $property);
-        if (!$propertyInfo->exists()) {
-            // @codeCoverageIgnoreStart
+        try {
+            $propertyInfo = Zendful::property($className, $property);
+        } catch (\InvalidArgumentException) {
             throw new InvalidArgumentException(sprintf('Could not find shadowed property %s::$%s', $className, $property));
-            // @codeCoverageIgnoreEnd
         }
 
         if ($mutable) {
@@ -1348,11 +1301,10 @@ final class Zend
         if ($method === '') {
             throw new InvalidArgumentException(sprintf('Could not find shadowed method %s::%s', $className, $method));
         }
-        $function = Zendful::method($className, $method);
-        if (!$function->exists()) {
-            // @codeCoverageIgnoreStart
+        try {
+            $function = Zendful::method($className, $method);
+        } catch (\InvalidArgumentException) {
             throw new InvalidArgumentException(sprintf('Could not find shadowed method %s::%s', $className, $method));
-            // @codeCoverageIgnoreEnd
         }
 
         if ($mutable) {
@@ -1367,9 +1319,7 @@ final class Zend
     {
         $groups = $method->getAttributes(Group::class);
         if (count($groups) > 1) {
-            // @codeCoverageIgnoreStart
             throw new InvalidArgumentException(sprintf('Trait method %s may have only one #[Group]', $method->getName()));
-            // @codeCoverageIgnoreEnd
         }
 
         return $groups === [] ? null : $groups[0]->newInstance();

@@ -76,7 +76,6 @@ final class Compiler
         $failure = null;
         $result = null;
 
-        // @codeCoverageIgnoreStart
         try {
             $ffi->zend_stream_init_filename(FFI::addr($handle), $filename);
             $globals = self::compilerGlobals($ffi);
@@ -422,8 +421,6 @@ final class Compiler
                 $failure = $exception;
             }
         }
-        // @codeCoverageIgnoreEnd
-
         return $failure;
     }
 

@@ -64,13 +64,9 @@ final class Executor
 
     public static function disableJitForMethod(MethodHandle $method): void
     {
-        // @codeCoverageIgnoreStart
-        // @codeCoverageIgnoreStart
         if (!function_exists('opcache_jit_blacklist')) {
             return;
         }
-        // @codeCoverageIgnoreEnd
-
         $key = strtolower($method->className() . '::' . $method->methodName());
         if (isset(self::$blacklistedMethods[$key]) || !$method->isUserDefined() || !$method->hasBytecode()) {
             return;
@@ -87,18 +83,13 @@ final class Executor
 
         opcache_jit_blacklist($closure);
         self::$blacklistedMethods[$key] = true;
-        // @codeCoverageIgnoreEnd
     }
 
     public static function disableJitForFunction(FunctionHandle $function): void
     {
-        // @codeCoverageIgnoreStart
-        // @codeCoverageIgnoreStart
         if (!function_exists('opcache_jit_blacklist') || !$function->isUserDefined() || !$function->hasBytecode()) {
             return;
         }
-        // @codeCoverageIgnoreEnd
-
         $key = strtolower($function->name());
         if (isset(self::$blacklistedMethods[$key])) {
             return;
@@ -111,18 +102,13 @@ final class Executor
 
         opcache_jit_blacklist(\Closure::fromCallable($callable));
         self::$blacklistedMethods[$key] = true;
-        // @codeCoverageIgnoreEnd
     }
 
     public static function disableJitForClass(ClassHandle $class): void
     {
-        // @codeCoverageIgnoreStart
-        // @codeCoverageIgnoreStart
         if (!function_exists('opcache_jit_blacklist')) {
             return;
         }
-        // @codeCoverageIgnoreEnd
-
         $key = strtolower($class->name());
         if (isset(self::$blacklistedClasses[$key])) {
             return;
@@ -142,19 +128,14 @@ final class Executor
             self::disableJitForMethod(new MethodHandle($class->name(), $method->getName()));
         }
         self::$blacklistedClasses[$key] = true;
-        // @codeCoverageIgnoreEnd
     }
 
     /** Invalidate callers after mutating Zend-owned runtime structures. */
     private static function blacklistCurrentCallers(int $limit = Natives::ZEND_CALLER_BLACKLIST_DEPTH): void
     {
-        // @codeCoverageIgnoreStart
-        // @codeCoverageIgnoreStart
         if (!function_exists('opcache_jit_blacklist')) {
             return;
         }
-        // @codeCoverageIgnoreEnd
-
         foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS | DEBUG_BACKTRACE_PROVIDE_OBJECT, $limit) as $frame) {
             if (isset($frame['object']) && $frame['object'] instanceof \Closure) {
                 opcache_jit_blacklist($frame['object']);
@@ -181,7 +162,6 @@ final class Executor
                 opcache_jit_blacklist(\Closure::fromCallable($function));
             }
         }
-        // @codeCoverageIgnoreEnd
     }
 
     public static function opcodeName(int $opcode): string

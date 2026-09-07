@@ -55,6 +55,7 @@ describe('Args', function (): void {
         $virtual = (new ReflectionClass(CallbackInfo::class))->newInstanceWithoutConstructor();
         foreach ([
             static fn() => $virtual->getId(),
+            static fn() => $virtual->getMethodName(),
             static fn() => $virtual->isCancellable(),
             static fn() => $virtual->isCancelled(),
             static fn() => $virtual->cancel(),

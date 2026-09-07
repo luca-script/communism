@@ -7,10 +7,13 @@ use Communism\Internals\Needle\Decompiler;
 use Communism\Internals\Needle\Instruction;
 use Communism\Internals\Needle\Injector;
 use Communism\Internals\Needle\Matcher;
+use Communism\Internals\Needle\MatchResult;
 use Communism\Internals\Needle\MethodBody;
 use Communism\Internals\Needle\Operand;
+use Communism\Internals\Needle\ResolvedInjection;
 use Communism\Mixin\CallbackInfo;
 use Communism\Mixin\CallbackInfoReturnable;
+use Communism\Mixin\CallbackInjectionException;
 use Communism\Mixin\At;
 use Communism\Mixin\Desc;
 use Communism\Mixin\Group;
@@ -27,8 +30,31 @@ function needleCoverageFunction(string $value): string
     return $value . '!';
 }
 
-describe('ReferenceMap', function (): void {
-    covers([ReferenceMap::class, ...COMMUNISM_INJECTOR_COVERAGE_CLASSES]);
+function needleFramelessCoverageFunction(string $value): string
+{
+    return strtoupper($value);
+}
+
+describe('Needle', function (): void {
+    covers([
+        Assembler::class,
+        CallbackInfo::class,
+        CallbackInfoReturnable::class,
+        Decompiler::class,
+        Group::class,
+        Inject::class,
+        InjectionConflictException::class,
+        InjectionException::class,
+        Instruction::class,
+        MatchResult::class,
+        Matcher::class,
+        MethodBody::class,
+        Operand::class,
+        ReferenceMap::class,
+        ResolvedInjection::class,
+        Slice::class,
+        ...COMMUNISM_INJECTOR_COVERAGE_CLASSES,
+    ]);
 
     it('remaps reference-map selectors and aliases', function (): void {
 
@@ -166,10 +192,17 @@ final class NeedleCallFixture
 
 it('decompiles bytecode into a transformable method body', function (): void {
     $body = Decompiler::decompile([new NeedleFixture(), 'greet']);
+    $compiledBody = Decompiler::decompileCompiledOpArray(
+        Zendful::compileFile(__DIR__ . '/../../../StaticAnalysis/compile-only.php')->opArray,
+        'compile-only.php',
+    );
+    $framelessBody = Decompiler::decompile('needleFramelessCoverageFunction');
 
     expect($body->name)->toBe('NeedleFixture::greet');
     expect($body->count())->toBeGreaterThan(0);
     expect(array_column($body->instructions(), 'name'))->toContain('CONCAT');
+    expect($compiledBody->count())->toBeGreaterThan(0);
+    expect($framelessBody->count())->toBeGreaterThan(0);
 });
 
 it('resolves every supported callable shape and rejects internal bytecode', function (): void {
@@ -404,6 +437,10 @@ it('rejects malformed injection and rewrite callbacks', function (): void {
 
     expect(fn(): MethodBody => Injector::inject($body, [$inject], static fn(): string => 'invalid'))
         ->toThrow(InvalidArgumentException::class, 'must return a MethodBody');
+
+    expect(fn(): MethodBody => Injector::inject($body, [$inject], static function (): MethodBody {
+        throw new RuntimeException('handler lookup failed');
+    }))->toThrow(CallbackInjectionException::class, 'Unable to resolve callback');
 
     $opArray = Zendful::method(NeedleFixture::class, 'greet')->opArray();
     expect(fn() => Injector::rewrite($body, $opArray, [$inject], static fn(): string => 'invalid'))

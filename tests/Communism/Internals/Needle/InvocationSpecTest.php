@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Communism\Internals\Needle\InvocationSpec;
+use Communism\Mixin\Desc;
 
 describe('InvocationSpec', function (): void {
     covers(InvocationSpec::class);
@@ -18,6 +19,8 @@ describe('InvocationSpec', function (): void {
     }
 
     function invocationIntersection(InvocationIntersectionLeft&InvocationIntersectionRight $value): void {}
+
+    function invocationUntyped($value) {}
 
     it('parses function, member, static, and extended invocation specifications', function (): void {
         expect(InvocationSpec::parse('strlen'))
@@ -88,6 +91,10 @@ describe('InvocationSpec', function (): void {
             ['run', ['signature' => ['parameters' => ['string']]]],
             ['run', ['signature' => 123]],
             ['run', ['signature' => ['parameters' => ['string|'], 'return' => 'int']]],
+            ['run', ['signature' => ['parameters' => [123], 'return' => 'int']]],
+            ['run', ['signature' => ['parameters' => [''], 'return' => 'int']]],
+            ['run', ['signature' => ['parameters' => ['string'], 'return' => 'string|']]],
+            ['run', ['signature' => ['parameters' => ['string'], 'return' => 'int!']]],
             ['run', ['signature' => ['parameters' => ['?string|int'], 'return' => 'int']]],
             ['run', ['aliases' => []]],
             ['run', ['aliases' => ['has space']]],
@@ -110,5 +117,26 @@ describe('InvocationSpec', function (): void {
 
         expect(static fn(): InvocationSpec => InvocationSpec::parse(['run', ['signature' => ['parameters' => ['string'], 'return' => 'int']], ['signature' => ['parameters' => ['string'], 'return' => 'int']]]))
             ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('accepts descriptors and validates reflected signatures', function (): void {
+        $descriptor = new Desc('invocationUnion', args: ['string|int'], returnType: 'int|float');
+        $fromDescriptor = InvocationSpec::parse($descriptor);
+        $reflection = new ReflectionFunction('invocationUnion');
+
+        expect($fromDescriptor->signature)->toBe(['parameters' => ['string|int'], 'return' => 'int|float'])
+            ->and($fromDescriptor->acceptsSignature($reflection))->toBeTrue()
+            ->and(InvocationSpec::parse('strlen')->acceptsSignature($reflection))->toBeTrue()
+            ->and(InvocationSpec::parse(['invocationUnion', ['signature' => ['parameters' => [], 'return' => 'void']]])->acceptsSignature($reflection))->toBeFalse()
+            ->and(InvocationSpec::parse(['invocationUnion', ['signature' => ['parameters' => ['*'], 'return' => '*']]])->acceptsSignature($reflection))->toBeTrue();
+    });
+
+    it('checks minimum match counts and untyped reflected signatures', function (): void {
+        $exact = InvocationSpec::parse('run{2}');
+        $untyped = InvocationSpec::parse(['invocationUntyped', ['signature' => ['parameters' => ['*'], 'return' => 'int']]]);
+
+        expect($exact->hasMinimumMatches(1))->toBeFalse()
+            ->and($exact->hasMinimumMatches(2))->toBeTrue()
+            ->and($untyped->acceptsSignature(new ReflectionFunction('invocationUntyped')))->toBeFalse();
     });
 });

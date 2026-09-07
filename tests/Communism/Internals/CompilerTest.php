@@ -130,7 +130,7 @@ describe('Compiler', function (): void {
 
         try {
             file_put_contents($child, "<?php\nfinal class CompilerTransitiveChild {}\n");
-            file_put_contents($root, "<?php\nrequire __DIR__ . '/child.php';\nfinal class CompilerTransitiveRoot {}\n");
+            file_put_contents($root, "<?php\nrequire(__DIR__ . '/child.php');\nrequire __DIR__ . '/child.php';\ninclude_once(__DIR__ . '/missing-optional.php');\ninclude \$dynamicInclude;\nfinal class CompilerTransitiveRoot {}\n");
 
             $compiled = Compiler::compileFile($root);
 
@@ -160,6 +160,37 @@ describe('Compiler', function (): void {
 
             expect(static fn(): mixed => Compiler::compileFile($filename))
                 ->toThrow(InvalidArgumentException::class, 'missing required include');
+        } finally {
+            unlink($filename);
+        }
+    });
+
+    it('ignores source paths that cannot be resolved statically', function (): void {
+        $path = new ReflectionMethod(Compiler::class, 'staticIncludePath');
+
+        expect($path->invoke(null, '', __DIR__))->toBeNull()
+            ->and($path->invoke(null, '$dynamicInclude', __DIR__))->toBeNull();
+    });
+
+    it('ignores unreadable and malformed include sources', function (): void {
+        $includes = new ReflectionMethod(Compiler::class, 'staticIncludes');
+
+        set_error_handler(static fn(): bool => true, E_WARNING);
+        try {
+            expect($includes->invoke(null, __DIR__ . '/missing-includes.php'))->toBe([]);
+        } finally {
+            restore_error_handler();
+        }
+
+        $filename = tempnam(sys_get_temp_dir(), 'communism-includes-');
+        if ($filename === false) {
+            throw new RuntimeException('Could not create an include fixture');
+        }
+
+        try {
+            file_put_contents($filename, "<?php\ninclude );\n");
+
+            expect($includes->invoke(null, $filename))->toBe([]);
         } finally {
             unlink($filename);
         }

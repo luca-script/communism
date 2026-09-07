@@ -624,14 +624,11 @@ final class Injector
                 if ($operand->kind !== Operand::CONSTANT) {
                     continue;
                 }
-                $targetTypeName = match (get_debug_type($operand->value)) {
-                    'int' => 'int',
-                    'float' => 'float',
-                    'bool' => 'bool',
-                    'array' => 'array',
-                    'string' => 'string',
-                    default => null,
-                };
+                $valueType = get_debug_type($operand->value);
+                $targetTypeName = null;
+                if (in_array($valueType, ['int', 'float', 'bool', 'array', 'string'], true)) {
+                    $targetTypeName = $valueType;
+                }
                 break;
             }
         } elseif ($match->type === 'variable') {
@@ -872,14 +869,18 @@ final class Injector
             if ($expected === null) {
                 continue;
             }
-            $castType = match ($expected) {
-                'bool' => 3,
-                'int' => 4,
-                'float' => 5,
-                'string' => 6,
-                'array' => 7,
-                default => null,
-            };
+            $castType = null;
+            if ($expected === 'bool') {
+                $castType = 3;
+            } elseif ($expected === 'int') {
+                $castType = 4;
+            } elseif ($expected === 'float') {
+                $castType = 5;
+            } elseif ($expected === 'string') {
+                $castType = 6;
+            } elseif ($expected === 'array') {
+                $castType = 7;
+            }
             if ($castType === null) {
                 continue;
             }
@@ -963,6 +964,7 @@ final class Injector
                 ? []
                 : self::lowerArgsRange($target, $source, $index + 1, $callEnd - 1, $argsCv, $arguments, $replacements, $invocationReflection, $coerce);
             if ($instruction->operand2->kind !== Operand::CONSTANT || !is_string($instruction->operand2->value)) {
+                // isArgsCall() requires a string method name before this branch is entered.
                 // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('A virtual Args method name must be a string');
                 // @codeCoverageIgnoreEnd
@@ -1169,14 +1171,18 @@ final class Injector
         if ($expected === null) {
             return [$operand, null, $coercionCount];
         }
-        $castType = match ($expected) {
-            'bool' => 3,
-            'int' => 4,
-            'float' => 5,
-            'string' => 6,
-            'array' => 7,
-            default => null,
-        };
+        $castType = null;
+        if ($expected === 'bool') {
+            $castType = 3;
+        } elseif ($expected === 'int') {
+            $castType = 4;
+        } elseif ($expected === 'float') {
+            $castType = 5;
+        } elseif ($expected === 'string') {
+            $castType = 6;
+        } elseif ($expected === 'array') {
+            $castType = 7;
+        }
         if ($castType === null) {
             return [$operand, null, $coercionCount];
         }
@@ -1213,15 +1219,22 @@ final class Injector
         if ($types === [] || in_array('mixed', $types, true)) {
             return $operand;
         }
-        $actual = match (get_debug_type($operand->value)) {
-            'int' => 'int',
-            'float' => 'float',
-            'bool' => 'bool',
-            'string' => 'string',
-            'array' => 'array',
-            'null' => 'null',
-            default => get_debug_type($operand->value),
-        };
+        $valueType = get_debug_type($operand->value);
+        if ($valueType === 'int') {
+            $actual = 'int';
+        } elseif ($valueType === 'float') {
+            $actual = 'float';
+        } elseif ($valueType === 'bool') {
+            $actual = 'bool';
+        } elseif ($valueType === 'string') {
+            $actual = 'string';
+        } elseif ($valueType === 'array') {
+            $actual = 'array';
+        } elseif ($valueType === 'null') {
+            $actual = 'null';
+        } else {
+            $actual = $valueType;
+        }
         foreach ($types as $type) {
             if ($actual === $type || self::typeAccepts($type, $actual)) {
                 return $operand;
@@ -1315,7 +1328,10 @@ final class Injector
         $expectedTypes = self::namedTypes($expected);
         $actualTypes = self::namedTypes($actual);
         if ($expectedTypes === [] || $actualTypes === []) {
+            // PHP ReflectionType implementations always expose named arms.
+            // @codeCoverageIgnoreStart
             return false;
+            // @codeCoverageIgnoreEnd
         }
 
         foreach ($actualTypes as $actualType) {
@@ -1436,7 +1452,10 @@ final class Injector
 
         $actualTypes = self::namedTypes($actual);
         if ($actualTypes === []) {
+            // PHP ReflectionType implementations always expose named arms.
+            // @codeCoverageIgnoreStart
             return null;
+            // @codeCoverageIgnoreEnd
         }
         $needsCast = false;
         foreach ($actualTypes as $actualType) {
@@ -1486,14 +1505,18 @@ final class Injector
             if (!$armIsCoercible) {
                 continue;
             }
-            $castType = match ($expectedArm) {
-                'bool' => 3,
-                'int' => 4,
-                'float' => 5,
-                'string' => 6,
-                'array' => 7,
-                default => null,
-            };
+            $castType = null;
+            if ($expectedArm === 'bool') {
+                $castType = 3;
+            } elseif ($expectedArm === 'int') {
+                $castType = 4;
+            } elseif ($expectedArm === 'float') {
+                $castType = 5;
+            } elseif ($expectedArm === 'string') {
+                $castType = 6;
+            } elseif ($expectedArm === 'array') {
+                $castType = 7;
+            }
             if ($castType !== null) {
                 return $castType;
             }
@@ -2437,6 +2460,7 @@ final class Injector
                 : self::lowerCallbackRange($target, $source, $index + 1, $callEnd - 1, $context, $preserve);
             $methodName = $instruction->operand2->value;
             if (!is_string($methodName)) {
+                // isVirtualCallbackCall() requires a string method name before this branch is entered.
                 // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('A virtual CallbackInfo method name must be a string');
                 // @codeCoverageIgnoreEnd
@@ -3060,9 +3084,7 @@ final class Injector
                 $map = [];
                 foreach ($sourceReceives as $index => $receive) {
                     if ($receive->result->kind !== Operand::CV || !is_int($receive->result->value)) {
-                        // @codeCoverageIgnoreStart
                         throw new InvalidArgumentException('An array redirect handler receive has no CV operand');
-                        // @codeCoverageIgnoreEnd
                     }
                     $map[$receive->result->value] = $operands[$index];
                 }
@@ -3110,7 +3132,6 @@ final class Injector
                 return [$sourceReceive->result->value => $operand];
             }
         }
-
         throw new InvalidArgumentException('A constant modifier target has no literal operand');
     }
 

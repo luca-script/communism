@@ -128,9 +128,7 @@ final class Decompiler
     private static function handleOpcodeName(string $name, int $opcode): string
     {
         if ($name === '') {
-            // @codeCoverageIgnoreStart
             return sprintf('OP_%d', $opcode);
-            // @codeCoverageIgnoreEnd
         }
 
         return str_contains($name, 'ZEND_') ? substr($name, 5) : $name;
@@ -166,12 +164,6 @@ final class Decompiler
             }
         } catch (ReflectionException $exception) {
             throw new InvalidArgumentException($exception->getMessage(), previous: $exception);
-        }
-
-        if (!$source->exists()) {
-            // @codeCoverageIgnoreStart
-            throw new RuntimeException(sprintf('Unable to locate runtime metadata for %s', self::describe($reflection)));
-            // @codeCoverageIgnoreEnd
         }
 
         return [$reflection, $source];

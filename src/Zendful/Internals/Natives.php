@@ -455,7 +455,6 @@ class Natives
     /**
      * @return FFI
      */
-    // @codeCoverageIgnoreStart
     private static function init(): FFI
     {
         $useLoadedModule = PHP_OS_FAMILY !== 'Windows' || PHP_VERSION_ID >= 80_500;
@@ -869,8 +868,6 @@ EOF . (ZEND_THREAD_SAFE
 
         return self::$def;
     }
-    // @codeCoverageIgnoreEnd
-
     /**
      * @return FFI
      */

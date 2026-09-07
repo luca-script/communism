@@ -66,9 +66,7 @@ final class Matcher
             throw new InvalidArgumentException(sprintf('Custom injection point %s must start with _', $name));
         }
         if (self::isBuiltIn($normalized)) {
-            // @codeCoverageIgnoreStart
             throw new InvalidArgumentException(sprintf('Cannot register built-in injection point %s', $name));
-            // @codeCoverageIgnoreEnd
         }
 
         self::$injectionPoints[$normalized] = $resolver;
@@ -312,9 +310,7 @@ final class Matcher
                 $target = $at->referenceMap->invocation($target);
             }
             if (!is_string($target) && !is_array($target) && !$target instanceof Desc) {
-                // @codeCoverageIgnoreStart
                 throw new InvalidArgumentException('INVOKE expects an invocation target specification');
-                // @codeCoverageIgnoreEnd
             }
             $spec = InvocationSpec::parse($target);
             $matches = [];
@@ -545,9 +541,7 @@ final class Matcher
             throw new InvalidArgumentException('A field target must be "::MEMBERNAME" or a local variable name');
         }
         if (str_starts_with($target, '::') && strlen($target) === 2) {
-            // @codeCoverageIgnoreStart
             throw new InvalidArgumentException('A field member name must not be empty');
-            // @codeCoverageIgnoreEnd
         }
         if (str_starts_with($target, '::')) {
             [, $descriptor] = self::fieldTarget($target);
@@ -917,12 +911,8 @@ final class Matcher
             return $declared;
         }
         if ($operand->kind === Operand::CONSTANT) {
-            return match (get_debug_type($operand->value)) {
-                'integer' => 'int',
-                'double' => 'float',
-                'boolean' => 'bool',
-                default => get_debug_type($operand->value),
-            };
+            $type = get_debug_type($operand->value);
+            return $type;
         }
         if (!in_array($operand->kind, [Operand::CV, Operand::TEMPORARY, Operand::VARIABLE], true)) {
             return null;
@@ -1027,9 +1017,6 @@ final class Matcher
                         $name = $init->operand2->value;
                     } elseif ($init->operand1->kind === Operand::CONSTANT && is_string($init->operand1->value)) {
                         $name = $init->operand1->value;
-                    }
-                    if ($name === null) {
-                        return null;
                     }
                     $type = (new ReflectionFunction($name))->getReturnType();
 
@@ -1211,17 +1198,21 @@ final class Matcher
             return false;
         }
 
-        $matched = match ($spec->kind) {
-            InvocationSpec::FUNCTION => in_array($init->name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME'], true)
+        $matched = false;
+        if ($spec->kind === InvocationSpec::FUNCTION) {
+            $matched = in_array($init->name, ['INIT_FCALL', 'INIT_FCALL_BY_NAME'], true)
                 && $calledName !== null
-                && self::matchesInvocationName($calledName, $spec),
-            InvocationSpec::STATIC => $init->name === 'INIT_STATIC_METHOD_CALL'
+                && self::matchesInvocationName($calledName, $spec);
+        } elseif ($spec->kind === InvocationSpec::STATIC) {
+            $matched = $init->name === 'INIT_STATIC_METHOD_CALL'
                 && $member !== null
                 && self::matchesInvocationName($member, $spec)
-                && ($spec->class === null || ($name !== null && InvocationSpec::matchesName($name, $spec->class))),
-            InvocationSpec::MEMBER => $init->name === 'INIT_METHOD_CALL' && $member !== null && self::matchesInvocationName($member, $spec),
-            default => false,
-        };
+                && ($spec->class === null || ($name !== null && InvocationSpec::matchesName($name, $spec->class)));
+        } elseif ($spec->kind === InvocationSpec::MEMBER) {
+            $matched = $init->name === 'INIT_METHOD_CALL'
+                && $member !== null
+                && self::matchesInvocationName($member, $spec);
+        }
 
         if (!$matched) {
             return false;

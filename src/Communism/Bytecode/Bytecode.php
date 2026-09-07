@@ -64,6 +64,7 @@ final class Bytecode
         }
 
         if (!$source->hasBytecode()) {
+            // Only malformed/incomplete runtime metadata can reach this for userland code.
             // @codeCoverageIgnoreStart
             throw new RuntimeException(sprintf('Bytecode is unavailable for %s', self::describeReflection($reflection)));
             // @codeCoverageIgnoreEnd
@@ -104,12 +105,6 @@ final class Bytecode
             }
         } catch (ReflectionException $exception) {
             throw new InvalidArgumentException($exception->getMessage(), previous: $exception);
-        }
-
-        if (!$source->exists()) {
-            // @codeCoverageIgnoreStart
-            throw new RuntimeException(sprintf('Unable to locate runtime metadata for %s', self::describeReflection($reflection)));
-            // @codeCoverageIgnoreEnd
         }
 
         return [$reflection, $source];
@@ -158,6 +153,7 @@ final class Bytecode
     {
         $opcodeName = $opline->name();
         if ($opcodeName === '') {
+            // OpcodeHandle validation rejects empty names in the available backend.
             // @codeCoverageIgnoreStart
             $opcodeName = sprintf('OP_%d', $opline->opcode());
             // @codeCoverageIgnoreEnd

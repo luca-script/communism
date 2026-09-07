@@ -98,7 +98,6 @@ namespace {
         it('exercises each platform loader path and fails closed when unavailable', function (): void {
             $invoke = static function (string $name, mixed ...$arguments): mixed {
                 $method = new ReflectionMethod(ZendfulFindLoadedLibrary::class, $name);
-                $method->setAccessible(true);
 
                 return $method->invoke(null, ...$arguments);
             };

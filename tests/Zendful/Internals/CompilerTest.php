@@ -39,7 +39,6 @@ describe('Compiler', function (): void {
         };
         $string->len = Natives::ZEND_MAX_SAFE_STRING_LENGTH + 1;
         $method = new \ReflectionMethod(ZendfulCompiler::class, 'zendString');
-        $method->setAccessible(true);
 
         expect(static fn(): mixed => $method->invoke(null, $string, $ffi))
             ->toThrow(RuntimeException::class);
@@ -51,7 +50,6 @@ describe('Compiler', function (): void {
             public int $len = 0;
         };
         $method = new ReflectionMethod(ZendfulCompiler::class, 'zendString');
-        $method->setAccessible(true);
 
         expect($method->invoke(null, $string, $ffi))->toBe('');
     });
@@ -59,7 +57,6 @@ describe('Compiler', function (): void {
     it('fails closed for absent compiler hash tables and preserves detached entry keys', function (): void {
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulCompiler::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -82,7 +79,6 @@ describe('Compiler', function (): void {
     it('keeps compiler cleanup idempotent when no Zend resources were acquired', function (): void {
         $invoke = static function (string $name, mixed ...$arguments): mixed {
             $method = new ReflectionMethod(ZendfulCompiler::class, $name);
-            $method->setAccessible(true);
 
             return $method->invoke(null, ...$arguments);
         };
@@ -93,7 +89,6 @@ describe('Compiler', function (): void {
         $classEntries = [];
         $functionEntries = [];
         $cleanup = new ReflectionMethod(ZendfulCompiler::class, 'cleanup');
-        $cleanup->setAccessible(true);
 
         expect($invoke('restoreCompilerOptions', $globals, 123))->toBeNull()
             ->and($globals->compiler_options)->toBe(123)
@@ -127,7 +122,6 @@ describe('Compiler', function (): void {
         $classEntries = [];
         $functionEntries = [];
         $cleanup = new ReflectionMethod(ZendfulCompiler::class, 'cleanup');
-        $cleanup->setAccessible(true);
 
         $failure = $cleanup->invokeArgs(null, [
             $ffi,
@@ -162,7 +156,6 @@ describe('Compiler', function (): void {
         $globals->arena = $arenaPointer;
 
         $releaseArena = new ReflectionMethod(ZendfulCompiler::class, 'releaseArena');
-        $releaseArena->setAccessible(true);
 
         $releaseArena->invoke(null, $globals, $arenaPointer, $checkpointAddress, $ffi);
 
@@ -174,7 +167,6 @@ describe('Compiler', function (): void {
         $ffi = Natives::ffi();
         $handle = $ffi->new('zend_file_handle');
         $cleanup = new ReflectionMethod(ZendfulCompiler::class, 'cleanup');
-        $cleanup->setAccessible(true);
 
         foreach (['class' => 'classKeys', 'function' => 'functionKeys'] as $table => $keyName) {
             $tableObject = new stdClass();
@@ -220,7 +212,6 @@ describe('Compiler', function (): void {
         $bucket->key = $ffi->cast('zend_string *', 0);
 
         $entries = new ReflectionMethod(ZendfulCompiler::class, 'entries');
-        $entries->setAccessible(true);
 
         expect($entries->invoke(null, $table, $ffi))->toBe([]);
     });
@@ -235,8 +226,6 @@ describe('Compiler', function (): void {
 
         $classes = new ReflectionMethod(ZendfulCompiler::class, 'classSnapshots');
         $functions = new ReflectionMethod(ZendfulCompiler::class, 'functionSnapshots');
-        $classes->setAccessible(true);
-        $functions->setAccessible(true);
         $entries = [[
             'key' => 'declaration',
             'length' => 11,

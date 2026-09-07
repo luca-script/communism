@@ -71,7 +71,6 @@ describe('CommonHeaderFixer', function (): void {
     function extractCommonHeaderProperties(CommonHeaderFixer $fixer, string $code): array
     {
         $method = new ReflectionMethod(CommonHeaderFixer::class, 'extractHeaderProperties');
-        $method->setAccessible(true);
 
         $result = $method->invoke($fixer, $code);
         if (!is_array($result)) {

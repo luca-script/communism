@@ -145,5 +145,8 @@ describe('ModifyConstant', function (): void {
     it('rejects an inconsistent nullValue discriminator', function (): void {
         expect(fn(): ModifyConstant => new ModifyConstant('value', new At('CONSTANT'), type: 'string', nullValue: true))
             ->toThrow(InvalidArgumentException::class, 'nullValue requires the null type discriminator');
+
+        expect(fn(): ModifyConstant => new ModifyConstant('value', new At('CONSTANT'), 'literal', 'null', true))
+            ->toThrow(InvalidArgumentException::class, 'nullValue cannot be combined with a non-null constant');
     });
 });
