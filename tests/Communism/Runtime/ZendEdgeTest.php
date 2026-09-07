@@ -301,7 +301,10 @@ describe('Zend', function (): void {
 
         #[Accessor]
         #[Accessor]
-        public function duplicate(): string { return 'duplicate'; }
+        public function duplicate(): string
+        {
+            return 'duplicate';
+        }
     }
 
     #[Mixin(ZendEdgeTarget::class)]
@@ -311,7 +314,10 @@ describe('Zend', function (): void {
 
         #[Final_]
         #[Final_]
-        public function duplicate(): string { return 'duplicate'; }
+        public function duplicate(): string
+        {
+            return 'duplicate';
+        }
     }
 
     #[Mixin(ZendEdgeTarget::class)]
@@ -321,7 +327,10 @@ describe('Zend', function (): void {
 
         #[Overwrite]
         #[Overwrite]
-        public function duplicate(): string { return 'duplicate'; }
+        public function duplicate(): string
+        {
+            return 'duplicate';
+        }
     }
 
     #[Mixin(ZendEdgeTarget::class)]
@@ -331,7 +340,10 @@ describe('Zend', function (): void {
 
         #[Shadow]
         #[Shadow]
-        public function duplicate(): string { return 'duplicate'; }
+        public function duplicate(): string
+        {
+            return 'duplicate';
+        }
     }
 
     final class ZendDuplicateGroupTarget
@@ -471,8 +483,7 @@ describe('Zend', function (): void {
 
         $invoke('autoloadPreloadTarget', 'MissingZendEdgeAutoloadTarget');
         $invoke('snapshotMethods', 'DateTime');
-        $anonymousSnapshotTarget = new class
-        {
+        $anonymousSnapshotTarget = new class {
             public function run(): string
             {
                 return 'run';
