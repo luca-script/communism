@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use Zendful\AssemblyPlanHandle;
+use Zendful\ClassHandle;
 use Zendful\FunctionHandle;
 use Zendful\MethodHandle;
+use Zendful\PropertyHandle;
 use Zendful\Internals\Executor as ZendfulExecutor;
 use Zendful\Internals\Natives;
 
@@ -54,6 +56,24 @@ describe('Executor', function (): void {
 
         expect(static fn(): mixed => $method->invoke(null, $ffi, $string))
             ->toThrow(RuntimeException::class);
+    });
+
+    it('exercises callable and member queries without requiring OPcache', function (): void {
+        $function = new FunctionHandle('executorCoverageFirst');
+        $method = new MethodHandle(ExecutorFinalTarget::class, 'itIsNotARealMethod');
+
+        expect(ZendfulExecutor::opcodeName(0))->toBeString()
+            ->and(ZendfulExecutor::opcodeId('NOP'))->toBeInt()
+            ->and(ZendfulExecutor::framelessFunction(-1))->toBeNull()
+            ->and(ZendfulExecutor::functionExists($function))->toBeTrue()
+            ->and(ZendfulExecutor::isUserDefined($function))->toBeTrue()
+            ->and(ZendfulExecutor::methodExists($method))->toBeFalse()
+            ->and(ZendfulExecutor::propertyExists(new PropertyHandle(ExecutorFinalTarget::class, 'missing')))->toBeFalse()
+            ->and(ZendfulExecutor::classExists(new ClassHandle(ExecutorFinalTarget::class)))->toBeTrue();
+
+        ZendfulExecutor::disableJitForFunction($function);
+        ZendfulExecutor::disableJitForMethod($method);
+        ZendfulExecutor::disableJitForClass(new ClassHandle(ExecutorFinalTarget::class));
     });
 
     it('covers literal encoding, constant decoding, and operand formatting', function (): void {
@@ -219,7 +239,7 @@ describe('Executor', function (): void {
     it('exercises the typed runtime queries and reversible flag operations', function (): void {
         $function = new \Zendful\FunctionHandle('executorCoverageFirst');
         $missingFunction = new \Zendful\FunctionHandle('missingExecutorFunction');
-        $class = new \Zendful\ClassHandle(ExecutorMutableTarget::class);
+        $class = new \Zendful\ClassHandle(ExecutorInterfaceInstallTarget::class);
         $method = new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'run');
         $property = new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'value');
 
@@ -237,7 +257,13 @@ describe('Executor', function (): void {
             ->and(ZendfulExecutor::methodHasBytecode(new \Zendful\MethodHandle(\DateTime::class, 'format')))->toBeFalse()
             ->and(ZendfulExecutor::hasBytecode(new \Zendful\FunctionHandle('strlen')))->toBeFalse()
             ->and(ZendfulExecutor::propertyHasHooks($property))->toBeFalse()
-            ->and(ZendfulExecutor::classIsImmutable($class))->toBeFalse();
+            ->and(ZendfulExecutor::classIsImmutable($class))->toBeFalse()
+            ->and(ZendfulExecutor::isUserDefinedMethod(new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'missing')))->toBeFalse();
+
+        expect(static fn(): mixed => ZendfulExecutor::clearPropertyVisibility(new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'missing')))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::setMethodVisibility(new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'missing'), 'public'))
+            ->toThrow(InvalidArgumentException::class);
 
         ZendfulExecutor::setClassFinal($class, true);
         ZendfulExecutor::setClassFinal($class, false);
@@ -280,6 +306,106 @@ describe('Executor', function (): void {
             ->toThrow(InvalidArgumentException::class);
     });
 
+    it('installs declared interfaces and reports missing class metadata', function (): void {
+        $class = new \Zendful\ClassHandle(ExecutorInterfaceInstallTarget::class);
+        $interface = new \Zendful\ClassHandle(ExecutorContract::class);
+
+        ZendfulExecutor::implementInterface($class, $interface);
+        ZendfulExecutor::implementInterface($class, $interface);
+        $class->implementInterface($interface);
+
+        expect(static fn(): mixed => ZendfulExecutor::classIsImmutable(new \Zendful\ClassHandle('ExecutorNotLoadedTarget')))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::setClassFinal(new \Zendful\ClassHandle('ExecutorNotLoadedTarget'), true))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::classStaticsInitialized(new \Zendful\ClassHandle('ExecutorNotLoadedTarget')))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::implementInterface(
+                new \Zendful\ClassHandle(ExecutorInterfaceInstallTarget::class),
+                new \Zendful\ClassHandle(\DateTime::class),
+            ))->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::setClassKind($class, 'enum'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('covers invalid runtime metadata and mutation combinations', function (): void {
+        $staticProperty = new \Zendful\PropertyHandle(ExecutorStaticPropertyTarget::class, 'value');
+        $abstractMethod = new \Zendful\MethodHandle(ExecutorAbstractMethodTarget::class, 'run');
+        $missing = new \Zendful\FunctionHandle('executorFunctionThatDoesNotExist');
+
+        expect(static fn(): mixed => ZendfulExecutor::setPropertyReadonly($staticProperty, true))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::setMethodFinal($abstractMethod, true))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::opArrayMetadata($missing))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::installMethod(
+                new \Zendful\MethodHandle(\DateTime::class, 'format'),
+                new \Zendful\ClassHandle(ExecutorInstallTarget::class),
+                'internalMethod',
+                false,
+            ))->toThrow(InvalidArgumentException::class);
+    });
+
+    it('rejects untyped properties, unrelated method swaps, and function mutations', function (): void {
+        $untyped = new \Zendful\PropertyHandle(ExecutorUntypedPropertyTarget::class, 'value');
+
+        expect(static fn(): mixed => ZendfulExecutor::setPropertyReadonly($untyped, true))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::setPropertyReadonly(new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'missing'), true))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::swapMethods(
+                new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'run'),
+                new \Zendful\MethodHandle(ExecutorInstallSource::class, 'source'),
+            ))->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::swapFunctions(
+                new \Zendful\FunctionHandle('strlen'),
+                new \Zendful\FunctionHandle('executorCoverageFirst'),
+            ))->toThrow(InvalidArgumentException::class);
+
+        $writableClassInfo = new ReflectionMethod(ZendfulExecutor::class, 'writableClassInfo');
+        expect(static fn(): mixed => $writableClassInfo->invoke(null, new \Zendful\ClassHandle('ExecutorNotLoadedTarget')))
+            ->toThrow(InvalidArgumentException::class)
+            ->and(ZendfulExecutor::methodHasBytecode(new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'run')))
+            ->toBeTrue();
+
+        ZendfulExecutor::swapFunctions(
+            new \Zendful\FunctionHandle('executorCoverageFirst'),
+            new \Zendful\FunctionHandle('executorCoverageSecond'),
+        );
+        ZendfulExecutor::swapFunctions(
+            new \Zendful\FunctionHandle('executorCoverageFirst'),
+            new \Zendful\FunctionHandle('executorCoverageSecond'),
+        );
+    });
+
+    it('rejects renaming a method onto an existing method', function (): void {
+        expect(static fn(): mixed => ZendfulExecutor::renameMethod(
+            new \Zendful\MethodHandle(ExecutorRenameTarget::class, 'first'),
+            'second',
+        ))->toThrow(InvalidArgumentException::class);
+    });
+
+    it('replaces an inherited method entry when installing a method', function (): void {
+        ZendfulExecutor::installMethod(
+            new \Zendful\MethodHandle(ExecutorInstallSource::class, 'source'),
+            new \Zendful\ClassHandle(ExecutorInheritedTarget::class),
+            'existing',
+            false,
+        );
+
+        expect((new \Zendful\MethodHandle(ExecutorInheritedTarget::class, 'existing'))->exists())->toBeTrue();
+    });
+
+    it('rejects installing over a directly declared method', function (): void {
+        expect(static fn(): mixed => ZendfulExecutor::installMethod(
+            new \Zendful\MethodHandle(ExecutorInstallSource::class, 'source'),
+            new \Zendful\ClassHandle(ExecutorDirectCollisionTarget::class),
+            'existing',
+            false,
+        ))->toThrow(InvalidArgumentException::class);
+    });
+
     it('accepts a valid readonly class transition', function (): void {
         $class = new \Zendful\ClassHandle(ExecutorReadonlyValidTarget::class);
 
@@ -311,6 +437,31 @@ describe('Executor', function (): void {
         );
         expect((new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'generated'))->exists())
             ->toBeTrue();
+
+        expect(static fn(): mixed => ZendfulExecutor::installGeneratedMethod(
+            $source,
+            $source,
+            $target,
+            'generated',
+        ))->toThrow(InvalidArgumentException::class);
+
+        expect(static fn(): mixed => ZendfulExecutor::installMethod(
+            new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
+            $target,
+            'missing',
+            false,
+        ))->toThrow(InvalidArgumentException::class)
+            ->and(static fn(): mixed => ZendfulExecutor::installGeneratedMethod(
+                new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
+                $source,
+                $target,
+                'missing',
+            ))->toThrow(InvalidArgumentException::class);
+
+        expect(static fn(): mixed => ZendfulExecutor::renameMethod(
+            new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
+            'renamed',
+        ))->toThrow(InvalidArgumentException::class);
     });
 
     it('covers executor validation entrypoints and no-op branches', function (): void {
@@ -885,6 +1036,11 @@ describe('Executor', function (): void {
         $raw = $ffi->new('znode_op');
         $opline = $ffi->new('zend_op');
 
+        $entryMethod = new ReflectionMethod(ZendfulExecutor::class, 'entry');
+        $entry = $entryMethod->invoke(null, new \Zendful\FunctionHandle('executorCoverageWithVariable'), $ffi);
+        $function = $ffi->cast('zend_function *', $entry->value->ptr);
+        expect(ZendfulExecutor::snapshotOpArray($function->op_array))->toBeInstanceOf(\Zendful\CompiledOpArrayHandle::class);
+
         expect(static fn(): mixed => $invoke('snapshotOpArray', $opArray))
             ->toThrow(RuntimeException::class)
             ->and($invoke('forgetLiterals', $ffi, null, 0))->toBeNull()
@@ -904,6 +1060,15 @@ describe('Executor', function (): void {
                 $opline,
                 null,
             ))->toThrow(InvalidArgumentException::class);
+
+        expect($invoke(
+            'writeOperand',
+            $ffi,
+            $raw,
+            ['kind' => 'raw', 'literalSlot' => null, 'type' => Natives::ZEND_IS_VAR, 'value' => 3, 'rawValue' => null],
+            $opline,
+            null,
+        ))->toBeNull();
 
         $internalMethod = new \Zendful\MethodHandle(\DateTime::class, 'format');
         $methodEntry = new ReflectionMethod(ZendfulExecutor::class, 'methodEntry');
@@ -968,9 +1133,16 @@ describe('Executor', function (): void {
 
     abstract class ExecutorAbstractTarget {}
 
+    abstract class ExecutorAbstractMethodTarget
+    {
+        abstract public function run(): string;
+    }
+
     final class ExecutorFinalTarget {}
 
     class ExecutorMissingTarget {}
+
+    class ExecutorInterfaceInstallTarget {}
 
     interface ExecutorContract {}
 
@@ -983,6 +1155,29 @@ describe('Executor', function (): void {
     class ExecutorStaticPropertyTarget
     {
         public static int $value = 1;
+    }
+
+    class ExecutorUntypedPropertyTarget
+    {
+        public $value;
+    }
+
+    class ExecutorRenameTarget
+    {
+        public function first(): string { return 'first'; }
+        public function second(): string { return 'second'; }
+    }
+
+    class ExecutorInheritedParent
+    {
+        public function existing(): string { return 'parent'; }
+    }
+
+    class ExecutorInheritedTarget extends ExecutorInheritedParent {}
+
+    class ExecutorDirectCollisionTarget
+    {
+        public function existing(): string { return 'existing'; }
     }
 
     class ExecutorHookTarget

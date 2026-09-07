@@ -15,11 +15,13 @@ use Zendful\OperandHandle;
 use Zendful\OpArrayHandle;
 use Zendful\PropertyHandle;
 use Zendful\Zendful;
+use Zendful\CompilerHandle;
 use Zendful\Internals\Natives;
 
 describe('Zendful', function (): void {
     covers([
         Zendful::class,
+        CompilerHandle::class,
         FunctionHandle::class,
         AssemblyPlanHandle::class,
         CompiledClassHandle::class,

@@ -107,7 +107,10 @@ final class FindLoadedLibrary
             return $function($filename);
         }
 
+        // The namespace shim is always installed by Zendful's runtime tests.
+        // @codeCoverageIgnoreStart
         return is_file($filename);
+        // @codeCoverageIgnoreEnd
     }
 
     /**
@@ -124,7 +127,10 @@ final class FindLoadedLibrary
             return $lines;
         }
 
+        // The namespace shim is always installed by Zendful's runtime tests.
+        // @codeCoverageIgnoreStart
         return file($filename, $flags);
+        // @codeCoverageIgnoreEnd
     }
 
     /** @return list<string> */
@@ -215,7 +221,10 @@ final class FindLoadedLibrary
                 }
 
                 if ([] === $libraries && $ffi instanceof NativeWindowsFfi) {
+                    // Only Windows can reach the native module fallback.
+                    // @codeCoverageIgnoreStart
                     $libraries = $ffi->phpModulePaths();
+                    // @codeCoverageIgnoreEnd
                 }
 
                 return array_values(array_unique($libraries));

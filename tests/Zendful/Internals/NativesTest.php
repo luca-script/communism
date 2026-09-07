@@ -29,6 +29,12 @@ describe('Natives', function (): void {
             ->and($libraries->invoke(null, 'Other', false, 5))->toBe([null, 'php8.5', 'php8', 'php']);
     });
 
+    it('returns no frameless function for unsupported indexes', function (): void {
+        $method = new ReflectionMethod(Natives::class, 'framelessFunctionName');
+
+        expect($method->invoke(null, -1))->toBeNull();
+    });
+
     it('exposes the complete named Zend constant surface without magic values', function (): void {
         $constants = (new ReflectionClass(Natives::class))->getConstants();
 

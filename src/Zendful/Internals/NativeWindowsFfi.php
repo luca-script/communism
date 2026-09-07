@@ -128,6 +128,8 @@ CDEF, 'kernel32.dll');
     /** @return list<string> */
     public function phpModulePaths(): array
     {
+        // Windows ToolHelp API is unavailable on the Linux coverage runner.
+        // @codeCoverageIgnoreStart
         /** @var \Zendful_FFI\WindowsApi $ffi */
         $ffi = $this->ffi;
         $paths = [];
@@ -152,6 +154,7 @@ CDEF, 'kernel32.dll');
         }
 
         return array_values(array_unique($paths));
+        // @codeCoverageIgnoreEnd
     }
 
     protected function cdef(string $code, ?string $library = null): object

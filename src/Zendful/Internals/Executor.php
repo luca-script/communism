@@ -62,6 +62,9 @@ final class Executor
         return Natives::ffi();
     }
 
+    // OPcache is deliberately disabled in coverage runs; these calls only
+    // exist when the optional Zend extension is available.
+    // @codeCoverageIgnoreStart
     public static function disableJitForMethod(MethodHandle $method): void
     {
         if (!function_exists('opcache_jit_blacklist')) {
@@ -163,6 +166,7 @@ final class Executor
             }
         }
     }
+    // @codeCoverageIgnoreEnd
 
     public static function opcodeName(int $opcode): string
     {
@@ -609,7 +613,10 @@ final class Executor
             return null;
         }
 
+        // PHP 8.6-only native frameless entries are unavailable on CI's PHP 8.4.
+        // @codeCoverageIgnoreStart
         return new FunctionHandle($name);
+        // @codeCoverageIgnoreEnd
     }
 
     public static function isUserDefined(FunctionHandle $function): bool

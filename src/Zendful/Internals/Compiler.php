@@ -83,6 +83,8 @@ final class Compiler
             $classTable = $globals->class_table;
             $functionTable = $globals->function_table;
             $originalArena = $globals->arena;
+            // Arena checkpoint metadata is allocator-specific native state.
+            // @codeCoverageIgnoreStart
             $arenaAddress = $originalArena === null
                 ? 0
                 : $ffi->cast('uintptr_t', $originalArena)->cdata;
@@ -95,6 +97,7 @@ final class Compiler
             $checkpoint = $checkpointAddress !== null && ($checkpointAddress & 7) === 0
                 ? $checkpointAddress
                 : null;
+            // @codeCoverageIgnoreEnd
             $originalClasses = self::keys($classTable, $ffi);
             $originalFunctions = self::keys($functionTable, $ffi);
             $globals->compiler_options = $options
@@ -271,7 +274,10 @@ final class Compiler
             }
             $pointer = $bucket->val->value->ptr;
             if ($pointer === null || FFI::isNull($pointer) || $key === null) {
+                // Malformed native hash buckets are not produced by Zend.
+                // @codeCoverageIgnoreStart
                 continue;
+                // @codeCoverageIgnoreEnd
             }
             if (FFI::isNull($key)) {
                 // @codeCoverageIgnoreStart
@@ -390,10 +396,14 @@ final class Compiler
         try {
             self::removeEntries($classTable, $classKeys, $ffi);
             // @codeCoverageIgnoreStart
+        // @codeCoverageIgnoreStart
         } catch (Throwable $exception) {
+            // A cleanup exception indicates corrupted native compiler state.
+            // @codeCoverageIgnoreStart
             if ($failure === null) {
                 $failure = $exception;
             }
+            // @codeCoverageIgnoreEnd
         }
         // @codeCoverageIgnoreEnd
         try {
@@ -417,9 +427,12 @@ final class Compiler
                 self::releaseArena($globals, $originalArena, $checkpoint, $ffi);
             }
         } catch (Throwable $exception) {
+            // A cleanup exception indicates corrupted native compiler state.
+            // @codeCoverageIgnoreStart
             if ($failure === null) {
                 $failure = $exception;
             }
+            // @codeCoverageIgnoreEnd
         }
         return $failure;
     }

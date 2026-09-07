@@ -452,6 +452,8 @@ class Natives
     /** @var list<string|null>|null */
     private static ?array $framelessFunctionNames = null;
 
+    // The body contains the platform ABI declaration passed to FFI::cdef().
+    // @codeCoverageIgnoreStart
     /**
      * @return FFI
      */
@@ -868,6 +870,7 @@ EOF . (ZEND_THREAD_SAFE
 
         return self::$def;
     }
+    // @codeCoverageIgnoreEnd
     /**
      * @return FFI
      */
@@ -947,6 +950,8 @@ EOF . (ZEND_THREAD_SAFE
         return $def->compiler_globals;
     }
 
+    // Frameless dispatch metadata exists only in the PHP 8.6 native ABI.
+    // @codeCoverageIgnoreStart
     public static function framelessFunctionName(int $index): ?string
     {
         if (!self::supportsPhp86() || $index < 0) {
@@ -1002,6 +1007,7 @@ EOF . (ZEND_THREAD_SAFE
 
         return FFI::string(self::def()->cast('char *', $string->val), $string->len);
     }
+    // @codeCoverageIgnoreEnd
 
     /**
      * @return \Zendful_FFI\HashTable

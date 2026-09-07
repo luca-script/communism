@@ -8,6 +8,11 @@ use Zendful\Internals\Natives;
 describe('Compiler', function (): void {
     covers([ZendfulCompiler::class, Natives::class]);
 
+    it('rejects a missing compiler source before entering FFI', function (): void {
+        expect(static fn(): mixed => ZendfulCompiler::compileFile(__DIR__ . '/missing-source.php'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
     it('compiles valid source into detached Zendful data', function (): void {
         $compiled = ZendfulCompiler::compileFile(__DIR__ . '/../../StaticAnalysis/compile-only.php');
 

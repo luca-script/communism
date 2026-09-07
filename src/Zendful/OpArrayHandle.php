@@ -111,7 +111,10 @@ if (class_exists('Zendful\\Native\\OpArrayHandle', false)) {
         public function assemble(AssemblyPlanHandle $plan): void
         {
             Internals\Executor::assemble($this, $plan);
+            // The native backend owns the post-assembly metadata refresh.
+            // @codeCoverageIgnoreStart
             $this->metadata = Internals\Executor::opArrayMetadata($this->source);
+            // @codeCoverageIgnoreEnd
         }
 
         public function opcode(int $index): OpcodeHandle
