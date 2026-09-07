@@ -396,7 +396,7 @@ final class Compiler
         try {
             self::removeEntries($classTable, $classKeys, $ffi);
             // @codeCoverageIgnoreStart
-        // @codeCoverageIgnoreStart
+            // @codeCoverageIgnoreStart
         } catch (Throwable $exception) {
             // A cleanup exception indicates corrupted native compiler state.
             // @codeCoverageIgnoreStart

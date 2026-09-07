@@ -1164,20 +1164,32 @@ describe('Executor', function (): void {
 
     class ExecutorRenameTarget
     {
-        public function first(): string { return 'first'; }
-        public function second(): string { return 'second'; }
+        public function first(): string
+        {
+            return 'first';
+        }
+        public function second(): string
+        {
+            return 'second';
+        }
     }
 
     class ExecutorInheritedParent
     {
-        public function existing(): string { return 'parent'; }
+        public function existing(): string
+        {
+            return 'parent';
+        }
     }
 
     class ExecutorInheritedTarget extends ExecutorInheritedParent {}
 
     class ExecutorDirectCollisionTarget
     {
-        public function existing(): string { return 'existing'; }
+        public function existing(): string
+        {
+            return 'existing';
+        }
     }
 
     class ExecutorHookTarget
