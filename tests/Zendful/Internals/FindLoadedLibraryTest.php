@@ -23,7 +23,7 @@ namespace {
         );
     });
     describe('FindLoadedLibrary', function (): void {
-        covers([ZendfulFindLoadedLibrary::class, LinuxFfi::class, WindowsFfi::class, NativeLinuxFfi::class, NativeWindowsFfi::class]);
+        covers([ZendfulFindLoadedLibrary::class, NativeLinuxFfi::class, NativeWindowsFfi::class]);
 
         it('finds loaded PHP libraries through the operating system', function (): void {
             $libraries = ZendfulFindLoadedLibrary::php();
