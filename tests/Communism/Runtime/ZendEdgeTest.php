@@ -194,7 +194,12 @@ describe('Zend', function (): void {
 
     final class ZendInvalidParameterMixin
     {
-        private function __construct(string $value) { if ($value === 'never') { throw new LogicException(); } }
+        private function __construct(string $value)
+        {
+            if ($value === 'never') {
+                throw new LogicException();
+            }
+        }
     }
 
     final class ZendEdgeTypedHandlers

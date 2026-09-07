@@ -54,7 +54,9 @@ describe('Executor', function (): void {
         $string->len = Natives::ZEND_MAX_SAFE_STRING_LENGTH + 1;
         $method = new ReflectionMethod(ZendfulExecutor::class, 'zendString');
 
-        expect(static function () use ($method, $ffi, $string): void { $method->invoke(null, $ffi, $string); })
+        expect(static function () use ($method, $ffi, $string): void {
+            $method->invoke(null, $ffi, $string);
+        })
             ->toThrow(RuntimeException::class);
     });
 
@@ -97,9 +99,13 @@ describe('Executor', function (): void {
         expect($invoke('constantValue', $ffi, $stringLiteral))->toBe('literal');
         $ffi->free_estring(FFI::addr($string));
 
-        expect(static function () use ($invoke, $ffi): void { $invoke('writeLiteral', $ffi, $ffi->new('zval'), new stdClass()); })
+        expect(static function () use ($invoke, $ffi): void {
+            $invoke('writeLiteral', $ffi, $ffi->new('zval'), new stdClass());
+        })
             ->toThrow(RuntimeException::class)
-            ->and(static function () use ($invoke, $ffi): void { $invoke('writeLiteral', $ffi, $ffi->new('zval'), "bad\0literal"); })
+            ->and(static function () use ($invoke, $ffi): void {
+                $invoke('writeLiteral', $ffi, $ffi->new('zval'), "bad\0literal");
+            })
             ->toThrow(InvalidArgumentException::class);
 
         $types = [
@@ -183,39 +189,73 @@ describe('Executor', function (): void {
             ->and($invoke('isValidOperandType', Natives::ZEND_IS_UNUSED | Natives::ZEND_IS_SMART_BRANCH_JMPZ, true))->toBeTrue()
             ->and($invoke('isValidOperandType', Natives::ZEND_OP_TYPE_MAX, false))->toBeFalse();
 
-        expect(static function () use ($invoke, $instruction): void { $invoke('validateAssemblyData', [[...$instruction, 'originalIndex' => 2]], [], 1, 1); })
+        expect(static function () use ($invoke, $instruction): void {
+            $invoke('validateAssemblyData', [[...$instruction, 'originalIndex' => 2]], [], 1, 1);
+        })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $instruction, $operand): void { $invoke('validateAssemblyData', [[...$instruction, 'operand1' => $operand(Natives::ZEND_IS_CONST, 'constant', 'missing', null, 2)]], [], 1, 1); })
+            ->and(static function () use ($invoke, $instruction, $operand): void {
+                $invoke('validateAssemblyData', [[...$instruction, 'operand1' => $operand(Natives::ZEND_IS_CONST, 'constant', 'missing', null, 2)]], [], 1, 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $operand): void { $invoke('validateOperand', $operand(Natives::ZEND_IS_CONST, 'constant', new stdClass(), null, 0)); })
+            ->and(static function () use ($invoke, $operand): void {
+                $invoke('validateOperand', $operand(Natives::ZEND_IS_CONST, 'constant', new stdClass(), null, 0));
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $operand): void { $invoke('validateOperand', $operand(Natives::ZEND_IS_UNUSED, 'constant', null, null, null)); })
+            ->and(static function () use ($invoke, $operand): void {
+                $invoke('validateOperand', $operand(Natives::ZEND_IS_UNUSED, 'constant', null, null, null));
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $operand): void { $invoke('validateOperand', $operand(Natives::ZEND_IS_VAR, 'variable', PHP_INT_MAX)); })
+            ->and(static function () use ($invoke, $operand): void {
+                $invoke('validateOperand', $operand(Natives::ZEND_IS_VAR, 'variable', PHP_INT_MAX));
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke): void { $invoke('validateAssemblyData', 'invalid', [], 1, 1); })
+            ->and(static function () use ($invoke): void {
+                $invoke('validateAssemblyData', 'invalid', [], 1, 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke): void { $invoke('validateAssemblyData', [], 'invalid', 1, 1); })
+            ->and(static function () use ($invoke): void {
+                $invoke('validateAssemblyData', [], 'invalid', 1, 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke): void { $invoke('validateAssemblyData', [], [-1 => null], 1, 1); })
+            ->and(static function () use ($invoke): void {
+                $invoke('validateAssemblyData', [], [-1 => null], 1, 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke): void { $invoke('validateAssemblyData', [], [0 => new stdClass()], 1, 1); })
+            ->and(static function () use ($invoke): void {
+                $invoke('validateAssemblyData', [], [0 => new stdClass()], 1, 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke): void { $invoke('validateAssemblyData', [], [0 => "bad\0literal"], 1, 1); })
+            ->and(static function () use ($invoke): void {
+                $invoke('validateAssemblyData', [], [0 => "bad\0literal"], 1, 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke): void { $invoke('validateInstruction', [], 1); })
+            ->and(static function () use ($invoke): void {
+                $invoke('validateInstruction', [], 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $instruction): void { $invoke('validateInstruction', [...$instruction, 'opcode' => -1], 1); })
+            ->and(static function () use ($invoke, $instruction): void {
+                $invoke('validateInstruction', [...$instruction, 'opcode' => -1], 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $instruction): void { $invoke('validateInstruction', [...$instruction, 'originalIndex' => -1], 1); })
+            ->and(static function () use ($invoke, $instruction): void {
+                $invoke('validateInstruction', [...$instruction, 'originalIndex' => -1], 1);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke): void { $invoke('validateOperand', [], false); })
+            ->and(static function () use ($invoke): void {
+                $invoke('validateOperand', [], false);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $operand): void { $invoke('validateOperand', [...$operand(Natives::ZEND_IS_VAR, 'raw', 1), 'rawValue' => 'invalid'], false); })
+            ->and(static function () use ($invoke, $operand): void {
+                $invoke('validateOperand', [...$operand(Natives::ZEND_IS_VAR, 'raw', 1), 'rawValue' => 'invalid'], false);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $operand): void { $invoke('validateOperand', $operand(Natives::ZEND_IS_CONST, 'variable', 1), false); })
+            ->and(static function () use ($invoke, $operand): void {
+                $invoke('validateOperand', $operand(Natives::ZEND_IS_CONST, 'variable', 1), false);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $operand): void { $invoke('validateOperand', $operand(Natives::ZEND_IS_VAR, 'variable', 'not-an-int'), false); })
+            ->and(static function () use ($invoke, $operand): void {
+                $invoke('validateOperand', $operand(Natives::ZEND_IS_VAR, 'variable', 'not-an-int'), false);
+            })
             ->toThrow(InvalidArgumentException::class);
     });
 
@@ -230,9 +270,13 @@ describe('Executor', function (): void {
 
         expect($invoke('validateAssemblyPlan', $validPlan, 0, 0))->toBe(0)
             ->and($invoke('requireLiteralPointer', $literalStorage = new stdClass()))->toBe($literalStorage)
-            ->and(static function () use ($invoke): void { $invoke('requireLiteralPointer', null); })
+            ->and(static function () use ($invoke): void {
+                $invoke('requireLiteralPointer', null);
+            })
             ->toThrow(RuntimeException::class)
-            ->and(static function () use ($invoke, $oversizedPlan): void { $invoke('validateAssemblyPlan', $oversizedPlan, 0, 0); })
+            ->and(static function () use ($invoke, $oversizedPlan): void {
+                $invoke('validateAssemblyPlan', $oversizedPlan, 0, 0);
+            })
             ->toThrow(InvalidArgumentException::class);
     });
 
@@ -260,9 +304,13 @@ describe('Executor', function (): void {
             ->and(ZendfulExecutor::classIsImmutable($class))->toBeFalse()
             ->and(ZendfulExecutor::isUserDefinedMethod(new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'missing')))->toBeFalse();
 
-        expect(static function (): void { ZendfulExecutor::clearPropertyVisibility(new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'missing')); })
+        expect(static function (): void {
+            ZendfulExecutor::clearPropertyVisibility(new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'missing'));
+        })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::setMethodVisibility(new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'missing'), 'public'); })
+            ->and(static function (): void {
+                ZendfulExecutor::setMethodVisibility(new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'missing'), 'public');
+            })
             ->toThrow(InvalidArgumentException::class);
 
         ZendfulExecutor::setClassFinal($class, true);
@@ -314,17 +362,27 @@ describe('Executor', function (): void {
         ZendfulExecutor::implementInterface($class, $interface);
         $class->implementInterface($interface);
 
-        expect(static function (): void { ZendfulExecutor::classIsImmutable(new \Zendful\ClassHandle('ExecutorNotLoadedTarget')); })
+        expect(static function (): void {
+            ZendfulExecutor::classIsImmutable(new \Zendful\ClassHandle('ExecutorNotLoadedTarget'));
+        })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::setClassFinal(new \Zendful\ClassHandle('ExecutorNotLoadedTarget'), true); })
+            ->and(static function (): void {
+                ZendfulExecutor::setClassFinal(new \Zendful\ClassHandle('ExecutorNotLoadedTarget'), true);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::classStaticsInitialized(new \Zendful\ClassHandle('ExecutorNotLoadedTarget')); })
+            ->and(static function (): void {
+                ZendfulExecutor::classStaticsInitialized(new \Zendful\ClassHandle('ExecutorNotLoadedTarget'));
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::implementInterface(
-                new \Zendful\ClassHandle(ExecutorInterfaceInstallTarget::class),
-                new \Zendful\ClassHandle(\DateTime::class),
-            ); })->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($class): void { ZendfulExecutor::setClassKind($class, 'enum'); })
+            ->and(static function (): void {
+                ZendfulExecutor::implementInterface(
+                    new \Zendful\ClassHandle(ExecutorInterfaceInstallTarget::class),
+                    new \Zendful\ClassHandle(\DateTime::class),
+                );
+            })->toThrow(InvalidArgumentException::class)
+            ->and(static function () use ($class): void {
+                ZendfulExecutor::setClassKind($class, 'enum');
+            })
             ->toThrow(InvalidArgumentException::class);
     });
 
@@ -333,38 +391,56 @@ describe('Executor', function (): void {
         $abstractMethod = new \Zendful\MethodHandle(ExecutorAbstractMethodTarget::class, 'run');
         $missing = new \Zendful\FunctionHandle('executorFunctionThatDoesNotExist');
 
-        expect(static function () use ($staticProperty): void { ZendfulExecutor::setPropertyReadonly($staticProperty, true); })
+        expect(static function () use ($staticProperty): void {
+            ZendfulExecutor::setPropertyReadonly($staticProperty, true);
+        })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($abstractMethod): void { ZendfulExecutor::setMethodFinal($abstractMethod, true); })
+            ->and(static function () use ($abstractMethod): void {
+                ZendfulExecutor::setMethodFinal($abstractMethod, true);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($missing): void { ZendfulExecutor::opArrayMetadata($missing); })
+            ->and(static function () use ($missing): void {
+                ZendfulExecutor::opArrayMetadata($missing);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::installMethod(
-                new \Zendful\MethodHandle(\DateTime::class, 'format'),
-                new \Zendful\ClassHandle(ExecutorInstallTarget::class),
-                'internalMethod',
-                false,
-            ); })->toThrow(InvalidArgumentException::class);
+            ->and(static function (): void {
+                ZendfulExecutor::installMethod(
+                    new \Zendful\MethodHandle(\DateTime::class, 'format'),
+                    new \Zendful\ClassHandle(ExecutorInstallTarget::class),
+                    'internalMethod',
+                    false,
+                );
+            })->toThrow(InvalidArgumentException::class);
     });
 
     it('rejects untyped properties, unrelated method swaps, and function mutations', function (): void {
         $untyped = new \Zendful\PropertyHandle(ExecutorUntypedPropertyTarget::class, 'value');
 
-        expect(static function () use ($untyped): void { ZendfulExecutor::setPropertyReadonly($untyped, true); })
+        expect(static function () use ($untyped): void {
+            ZendfulExecutor::setPropertyReadonly($untyped, true);
+        })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::setPropertyReadonly(new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'missing'), true); })
+            ->and(static function (): void {
+                ZendfulExecutor::setPropertyReadonly(new \Zendful\PropertyHandle(ExecutorMutableTarget::class, 'missing'), true);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::swapMethods(
-                new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'run'),
-                new \Zendful\MethodHandle(ExecutorInstallSource::class, 'source'),
-            ); })->toThrow(InvalidArgumentException::class)
-            ->and(static function (): void { ZendfulExecutor::swapFunctions(
-                new \Zendful\FunctionHandle('strlen'),
-                new \Zendful\FunctionHandle('executorCoverageFirst'),
-            ); })->toThrow(InvalidArgumentException::class);
+            ->and(static function (): void {
+                ZendfulExecutor::swapMethods(
+                    new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'run'),
+                    new \Zendful\MethodHandle(ExecutorInstallSource::class, 'source'),
+                );
+            })->toThrow(InvalidArgumentException::class)
+            ->and(static function (): void {
+                ZendfulExecutor::swapFunctions(
+                    new \Zendful\FunctionHandle('strlen'),
+                    new \Zendful\FunctionHandle('executorCoverageFirst'),
+                );
+            })->toThrow(InvalidArgumentException::class);
 
         $writableClassInfo = new ReflectionMethod(ZendfulExecutor::class, 'writableClassInfo');
-        expect(static function () use ($writableClassInfo): void { $writableClassInfo->invoke(null, new \Zendful\ClassHandle('ExecutorNotLoadedTarget')); })
+        expect(static function () use ($writableClassInfo): void {
+            $writableClassInfo->invoke(null, new \Zendful\ClassHandle('ExecutorNotLoadedTarget'));
+        })
             ->toThrow(InvalidArgumentException::class)
             ->and(ZendfulExecutor::methodHasBytecode(new \Zendful\MethodHandle(ExecutorMutableTarget::class, 'run')))
             ->toBeTrue();
@@ -380,10 +456,12 @@ describe('Executor', function (): void {
     });
 
     it('rejects renaming a method onto an existing method', function (): void {
-        expect(static function (): void { ZendfulExecutor::renameMethod(
-            new \Zendful\MethodHandle(ExecutorRenameTarget::class, 'first'),
-            'second',
-        ); })->toThrow(InvalidArgumentException::class);
+        expect(static function (): void {
+            ZendfulExecutor::renameMethod(
+                new \Zendful\MethodHandle(ExecutorRenameTarget::class, 'first'),
+                'second',
+            );
+        })->toThrow(InvalidArgumentException::class);
     });
 
     it('replaces an inherited method entry when installing a method', function (): void {
@@ -398,12 +476,14 @@ describe('Executor', function (): void {
     });
 
     it('rejects installing over a directly declared method', function (): void {
-        expect(static function (): void { ZendfulExecutor::installMethod(
-            new \Zendful\MethodHandle(ExecutorInstallSource::class, 'source'),
-            new \Zendful\ClassHandle(ExecutorDirectCollisionTarget::class),
-            'existing',
-            false,
-        ); })->toThrow(InvalidArgumentException::class);
+        expect(static function (): void {
+            ZendfulExecutor::installMethod(
+                new \Zendful\MethodHandle(ExecutorInstallSource::class, 'source'),
+                new \Zendful\ClassHandle(ExecutorDirectCollisionTarget::class),
+                'existing',
+                false,
+            );
+        })->toThrow(InvalidArgumentException::class);
     });
 
     it('accepts a valid readonly class transition', function (): void {
@@ -438,30 +518,38 @@ describe('Executor', function (): void {
         expect((new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'generated'))->exists())
             ->toBeTrue();
 
-        expect(static function () use ($source, $target): void { ZendfulExecutor::installGeneratedMethod(
-            $source,
-            $source,
-            $target,
-            'generated',
-        ); })->toThrow(InvalidArgumentException::class);
-
-        expect(static function () use ($target): void { ZendfulExecutor::installMethod(
-            new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
-            $target,
-            'missing',
-            false,
-        ); })->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($source, $target): void { ZendfulExecutor::installGeneratedMethod(
-                new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
+        expect(static function () use ($source, $target): void {
+            ZendfulExecutor::installGeneratedMethod(
+                $source,
                 $source,
                 $target,
-                'missing',
-            ); })->toThrow(InvalidArgumentException::class);
+                'generated',
+            );
+        })->toThrow(InvalidArgumentException::class);
 
-        expect(static function (): void { ZendfulExecutor::renameMethod(
-            new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
-            'renamed',
-        ); })->toThrow(InvalidArgumentException::class);
+        expect(static function () use ($target): void {
+            ZendfulExecutor::installMethod(
+                new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
+                $target,
+                'missing',
+                false,
+            );
+        })->toThrow(InvalidArgumentException::class)
+            ->and(static function () use ($source, $target): void {
+                ZendfulExecutor::installGeneratedMethod(
+                    new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
+                    $source,
+                    $target,
+                    'missing',
+                );
+            })->toThrow(InvalidArgumentException::class);
+
+        expect(static function (): void {
+            ZendfulExecutor::renameMethod(
+                new \Zendful\MethodHandle(ExecutorInstallTarget::class, 'missing'),
+                'renamed',
+            );
+        })->toThrow(InvalidArgumentException::class);
     });
 
     it('covers executor validation entrypoints and no-op branches', function (): void {
@@ -479,7 +567,9 @@ describe('Executor', function (): void {
         ZendfulExecutor::disableJitForFunction($function);
         ZendfulExecutor::disableJitForClass($class);
 
-        expect(static function (): void { ZendfulExecutor::opcodeId('not-an-opcode'); })
+        expect(static function (): void {
+            ZendfulExecutor::opcodeId('not-an-opcode');
+        })
             ->toThrow(InvalidArgumentException::class)
             ->and(static function (): void {
                 ZendfulExecutor::setClassFinal(new \Zendful\ClassHandle(ExecutorAbstractTarget::class), true);
@@ -869,16 +959,20 @@ describe('Executor', function (): void {
         };
         $assemble = new ReflectionMethod(ZendfulExecutor::class, 'assemble');
 
-        expect(static function () use ($assemble, $make, $assembly): void { $assemble->invoke(
-            null,
-            $make(new FunctionHandle('ZendfulNeverLoadedAssemblyFunction')),
-            $assembly,
-        ); })->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($assemble, $make, $assembly): void { $assemble->invoke(
+        expect(static function () use ($assemble, $make, $assembly): void {
+            $assemble->invoke(
                 null,
-                $make(new FunctionHandle('strlen')),
+                $make(new FunctionHandle('ZendfulNeverLoadedAssemblyFunction')),
                 $assembly,
-            ); })->toThrow(RuntimeException::class);
+            );
+        })->toThrow(InvalidArgumentException::class)
+            ->and(static function () use ($assemble, $make, $assembly): void {
+                $assemble->invoke(
+                    null,
+                    $make(new FunctionHandle('strlen')),
+                    $assembly,
+                );
+            })->toThrow(RuntimeException::class);
     });
 
     it('fails closed for missing method, property, and class metadata', function (): void {
@@ -894,7 +988,9 @@ describe('Executor', function (): void {
         expect($invoke('methodEntry', $missingMethod))->toBeNull()
             ->and($invoke('propertyInfo', $missingProperty))->toBeNull()
             ->and($invoke('classInfo', $missingClass))->toBeNull()
-            ->and(static function () use ($invoke): void { $invoke('assertLoadedClassName', 'ZendfulNeverLoadedForMetadata'); })
+            ->and(static function () use ($invoke): void {
+                $invoke('assertLoadedClassName', 'ZendfulNeverLoadedForMetadata');
+            })
             ->toThrow(InvalidArgumentException::class);
     });
 
@@ -910,7 +1006,9 @@ describe('Executor', function (): void {
         $assertWritable = new ReflectionMethod(ZendfulExecutor::class, 'assertWritableFunction');
 
         try {
-            expect(static function () use ($assertWritable, $entry): void { $assertWritable->invoke(null, $entry, 'immutable'); })
+            expect(static function () use ($assertWritable, $entry): void {
+                $assertWritable->invoke(null, $entry, 'immutable');
+            })
                 ->toThrow(InvalidArgumentException::class);
         } finally {
             $function->fn_flags = $originalFlags;
@@ -941,7 +1039,9 @@ describe('Executor', function (): void {
         $assertWritable = new ReflectionMethod(ZendfulExecutor::class, 'assertWritableMethod');
 
         try {
-            expect(static function () use ($assertWritable, $method, $entry): void { $assertWritable->invoke(null, $method, $entry); })
+            expect(static function () use ($assertWritable, $method, $entry): void {
+                $assertWritable->invoke(null, $method, $entry);
+            })
                 ->toThrow(InvalidArgumentException::class);
         } finally {
             $function->fn_flags = $originalFlags;
@@ -974,9 +1074,11 @@ describe('Executor', function (): void {
         ))->toBeFalse()
             ->and(ZendfulExecutor::hasBytecode(new \Zendful\FunctionHandle('ZendfulNeverLoadedBytecodeFunction')))
             ->toBeFalse()
-            ->and(static function (): void { ZendfulExecutor::opArrayMetadata(
-                new \Zendful\MethodHandle(\DateTime::class, 'format'),
-            ); })->toThrow(RuntimeException::class);
+            ->and(static function (): void {
+                ZendfulExecutor::opArrayMetadata(
+                    new \Zendful\MethodHandle(\DateTime::class, 'format'),
+                );
+            })->toThrow(RuntimeException::class);
     });
 
     it('rejects immutable classes and non-readonly parents', function (): void {
@@ -989,7 +1091,9 @@ describe('Executor', function (): void {
         $writable = new ReflectionMethod(ZendfulExecutor::class, 'writableClassInfo');
 
         try {
-            expect(static function () use ($writable, $class): void { $writable->invoke(null, $class); })
+            expect(static function () use ($writable, $class): void {
+                $writable->invoke(null, $class);
+            })
                 ->toThrow(InvalidArgumentException::class);
         } finally {
             $classInfo->ce_flags = $originalFlags;
@@ -1017,11 +1121,17 @@ describe('Executor', function (): void {
         $setMethodFlags = new ReflectionMethod(ZendfulExecutor::class, 'setMethodFlags');
         $setPropertyFlags = new ReflectionMethod(ZendfulExecutor::class, 'setPropertyFlags');
 
-        expect(static function () use ($methodFlags, $missingMethod): void { $methodFlags->invoke(null, $missingMethod); })
+        expect(static function () use ($methodFlags, $missingMethod): void {
+            $methodFlags->invoke(null, $missingMethod);
+        })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($setMethodFlags, $missingMethod): void { $setMethodFlags->invoke(null, $missingMethod, 0); })
+            ->and(static function () use ($setMethodFlags, $missingMethod): void {
+                $setMethodFlags->invoke(null, $missingMethod, 0);
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($setPropertyFlags, $missingProperty): void { $setPropertyFlags->invoke(null, $missingProperty, 0); })
+            ->and(static function () use ($setPropertyFlags, $missingProperty): void {
+                $setPropertyFlags->invoke(null, $missingProperty, 0);
+            })
             ->toThrow(InvalidArgumentException::class);
     });
 
@@ -1042,25 +1152,31 @@ describe('Executor', function (): void {
         $function = $ffi->cast('zend_function *', $entry->value->ptr);
         expect(ZendfulExecutor::snapshotOpArray($function->op_array))->toBeInstanceOf(\Zendful\CompiledOpArrayHandle::class);
 
-        expect(static function () use ($invoke, $opArray): void { $invoke('snapshotOpArray', $opArray); })
+        expect(static function () use ($invoke, $opArray): void {
+            $invoke('snapshotOpArray', $opArray);
+        })
             ->toThrow(RuntimeException::class)
             ->and($invoke('forgetLiterals', $ffi, null, 0))->toBeNull()
-            ->and(static function () use ($invoke, $ffi, $raw, $opline): void { $invoke(
-                'writeOperand',
-                $ffi,
-                $raw,
-                ['kind' => 'constant', 'literalSlot' => null, 'type' => Natives::ZEND_IS_CONST, 'value' => null, 'rawValue' => null],
-                $opline,
-                null,
-            ); })->toThrow(RuntimeException::class)
-            ->and(static function () use ($invoke, $ffi, $raw, $opline): void { $invoke(
-                'writeOperand',
-                $ffi,
-                $raw,
-                ['kind' => 'raw', 'literalSlot' => null, 'type' => Natives::ZEND_IS_UNUSED, 'value' => 'not-an-int', 'rawValue' => null],
-                $opline,
-                null,
-            ); })->toThrow(InvalidArgumentException::class);
+            ->and(static function () use ($invoke, $ffi, $raw, $opline): void {
+                $invoke(
+                    'writeOperand',
+                    $ffi,
+                    $raw,
+                    ['kind' => 'constant', 'literalSlot' => null, 'type' => Natives::ZEND_IS_CONST, 'value' => null, 'rawValue' => null],
+                    $opline,
+                    null,
+                );
+            })->toThrow(RuntimeException::class)
+            ->and(static function () use ($invoke, $ffi, $raw, $opline): void {
+                $invoke(
+                    'writeOperand',
+                    $ffi,
+                    $raw,
+                    ['kind' => 'raw', 'literalSlot' => null, 'type' => Natives::ZEND_IS_UNUSED, 'value' => 'not-an-int', 'rawValue' => null],
+                    $opline,
+                    null,
+                );
+            })->toThrow(InvalidArgumentException::class);
 
         expect($invoke(
             'writeOperand',
@@ -1076,11 +1192,17 @@ describe('Executor', function (): void {
         $internalEntry = $methodEntry->invoke(null, $internalMethod);
         $assertWritable = new ReflectionMethod(ZendfulExecutor::class, 'assertWritableMethod');
 
-        expect(static function () use ($assertWritable, $internalMethod, $internalEntry): void { $assertWritable->invoke(null, $internalMethod, $internalEntry); })
+        expect(static function () use ($assertWritable, $internalMethod, $internalEntry): void {
+            $assertWritable->invoke(null, $internalMethod, $internalEntry);
+        })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $ffi): void { $invoke('cloneUserFunction', $ffi, $ffi->new('zend_function'), 'clone'); })
+            ->and(static function () use ($invoke, $ffi): void {
+                $invoke('cloneUserFunction', $ffi, $ffi->new('zend_function'), 'clone');
+            })
             ->toThrow(InvalidArgumentException::class)
-            ->and(static function () use ($invoke, $internalMethod): void { $invoke('opArrayMetadata', $internalMethod); })
+            ->and(static function () use ($invoke, $internalMethod): void {
+                $invoke('opArrayMetadata', $internalMethod);
+            })
             ->toThrow(RuntimeException::class);
     });
 
