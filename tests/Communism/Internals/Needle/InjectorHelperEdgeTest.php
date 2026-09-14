@@ -700,7 +700,7 @@ describe('Injector', function (): void {
         expect($call('mapHandlerLocals', new MethodBody('empty', null, 0, 0, [], [1 => 'unmapped']), $localHandler, [], [], 0))
             ->toEqual([[1 => Operand::cv(1)], 0])
             ->and($call('mapHandlerLocals', new MethodBody('empty', null, 0, 0, []), $localHandler, [], [], 0))
-            ->toEqual([[1 => Operand::temporary(80)], 1]);
+            ->toEqual([[1 => Operand::variable(80)], 1]);
 
         $instruction = new Instruction(0, 'RETURN', Operand::unused(), Operand::unused(), Operand::unused());
         $reflectionTarget = new MethodBody('injectorIntegerArgument', null, 0, 0, []);

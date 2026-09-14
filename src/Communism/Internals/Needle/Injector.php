@@ -759,7 +759,9 @@ final class Injector
 
     /**
      * Remap handler CVs into the target frame. Locals with the same name use
-     * the target CV, while handler-only locals are assigned fresh temporaries.
+     * the target CV, while handler-only locals are assigned fresh writable
+     * variables. A handler CV can be the left-hand side of an ASSIGN, so a
+     * temporary operand would produce invalid Zend bytecode.
      *
      * @param array<int, Operand> $cvMap
      * @param list<int> $callbackCvs
@@ -799,7 +801,7 @@ final class Injector
                 continue;
             }
 
-            $cvMap[$cvValue] = Operand::temporary(($nextTemporary + 5) * 16);
+            $cvMap[$cvValue] = Operand::variable(($nextTemporary + 5) * 16);
             $nextTemporary++;
             $extraTemporaryCount++;
         }
